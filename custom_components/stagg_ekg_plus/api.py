@@ -58,6 +58,12 @@ INIT_SEQUENCE = bytes.fromhex("efdd0b3031323334353637383930313233349a6d")
 
 FRAME_SEPARATOR = b"\xef\xdd"
 
+# Safety cap on the notification reassembly buffer. Real frames are tiny (the
+# largest, the one-time auth echo, is under ~40 bytes). If the stream stops
+# producing paired 0xefdd separators (corruption/garbage), drop stale bytes
+# rather than letting the buffer grow without bound.
+_MAX_BUFFER = 512
+
 # Command bytes.
 CMD = 0x0A
 TYPE_POWER = 0x00
@@ -268,6 +274,15 @@ class StaggClient:
             if new_state != self.state:
                 self.state = new_state
                 changed = True
+        if len(self._buffer) > _MAX_BUFFER:
+            # No complete frames are forming (corrupt or separatorless stream);
+            # drop stale bytes back to the last separator to bound memory.
+            keep = self._buffer.rfind(FRAME_SEPARATOR)
+            if keep > 0:
+                del self._buffer[:keep]
+            else:
+                self._buffer.clear()
+            _LOGGER.debug("rx buffer exceeded %d bytes; trimmed", _MAX_BUFFER)
         if changed:
             _LOGGER.debug("state %s", self.state)
             if self._on_state is not None:
