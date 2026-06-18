@@ -21,7 +21,7 @@ project, built as a HACS-installable custom integration.
 
 ## Requirements
 
-- Home Assistant 2024.8 or newer.
+- Home Assistant 2026.3 or newer.
 - A Bluetooth adapter on the Home Assistant host, or an ESPHome Bluetooth proxy within range of the kettle.
 
 > **Important:** Bluetooth LE allows only one active connection to the kettle at a time.
