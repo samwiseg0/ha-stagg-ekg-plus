@@ -10,9 +10,9 @@ project, built as a HACS-installable custom integration.
 
 - **Climate** entity: set the target temperature and turn the kettle on/off.
 - **Switch**: power on/off.
-- **Sensors**: current temperature, target temperature, and an **Auto-off timer** (how long until the kettle powers itself off: counts down from 60 minutes while keep-warm/hold is on, or 5 minutes after a boil without hold).
+- **Sensors**: current temperature, target temperature, and a **Hold timer** (how long the kettle will keep going before it powers itself off: counts down from 60 minutes while keep-warm/hold is on, or 5 minutes after a boil without hold).
 - **Diagnostic sensor** (disabled by default): **Signal strength** (Bluetooth RSSI).
-- **Binary sensors**: **Holding** (on once the kettle has reached the target and is maintaining temperature; off while heating up) and **On base** (on when the kettle is seated on its base, off when lifted). An optional **Hold enabled** sensor (the physical hold slider position) is available but disabled by default.
+- **Binary sensors**: **Holding temp** (on once the kettle has reached the target and is maintaining temperature; off while heating up) and **On base** (on when the kettle is seated on its base, off when lifted). An optional **Hold enabled** sensor (the physical hold slider position) is available but disabled by default.
 - Follows the kettle's Fahrenheit/Celsius setting automatically (104-212 F / 40-100 C).
 - Local push: state updates stream live over Bluetooth notifications, with automatic reconnect.
 - Selectable **connection mode**: connect on demand (default - stays connected while the kettle is on, frees the adapter once it is off), or keep a persistent connection for always-live updates.
@@ -53,7 +53,7 @@ The kettle advertises as `FELLOW` followed by the last bytes of its address (for
 
 - The kettle reports temperatures in whatever unit it is set to on the device (Fahrenheit or Celsius). The integration follows that setting automatically, including if you flip the physical F/C switch while it is running. Valid ranges are 104-212 deg F / 40-100 deg C.
 - The current-temperature reading is only available while the kettle is actively measuring; when it is off **or lifted off its base**, the kettle reports a fixed sentinel value (32), so the integration reports it as unavailable.
-- **Holding** turns on once the kettle reaches the target and starts maintaining temperature (it is off during the initial heat-up). **Auto-off timer** shows ~60 minutes when the hold slider is on, or ~5 minutes for the post-boil keep-warm without hold.
+- **Holding temp** turns on once the kettle reaches the target and starts maintaining temperature (it is off during the initial heat-up). **Hold timer** shows ~60 minutes when the hold slider is on, or ~5 minutes for the post-boil keep-warm without hold.
 - Hold and unit (F/C) are physical controls on the kettle and cannot be changed over Bluetooth; they are read-only here.
 - Bluetooth LE allows only one active connection to the kettle at a time. If you previously ran the Homebridge `homebridge-stagg-ekg-plus-server` on a Pi, stop it so Home Assistant can connect.
 
@@ -95,7 +95,7 @@ target and is actively maintaining temperature** (keep-warm), and **false while 
 is still heating up** or off. It is more reliable than `0x01` (the physical
 hold-slider position), which **flickers** as the heating element cycles on and off
 at setpoint. `0x06` stays steady, so it is the dependable "is the kettle keeping
-the water warm right now" signal, and it is what drives the **Holding** binary
+the water warm right now" signal, and it is what drives the **Holding temp** binary
 sensor.
 
 ## Development

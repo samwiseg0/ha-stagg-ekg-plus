@@ -53,7 +53,7 @@
         "name": "Target temperature"
       },
       "countdown": {
-        "name": "Auto-off timer"
+        "name": "Hold timer"
       },
       "rssi": {
         "name": "Signal strength"
@@ -61,7 +61,7 @@
     },
     "binary_sensor": {
       "hold": {
-        "name": "Holding"
+        "name": "Holding temp"
       },
       "hold_enabled": {
         "name": "Hold enabled"
