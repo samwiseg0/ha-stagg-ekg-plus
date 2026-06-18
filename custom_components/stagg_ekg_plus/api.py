@@ -38,6 +38,8 @@ State frame: ef dd <type> <payload...> where type is one of STATE_* below.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -63,6 +65,11 @@ FRAME_SEPARATOR = b"\xef\xdd"
 # producing paired 0xefdd separators (corruption/garbage), drop stale bytes
 # rather than letting the buffer grow without bound.
 _MAX_BUFFER = 512
+
+# Max time for the post-connect setup (subscribe + auth write). Bounds the
+# window the coordinator holds its connect lock, so a wedged BLE stack cannot
+# hang setup indefinitely.
+_START_TIMEOUT = 15.0
 
 # Command bytes.
 CMD = 0x0A
@@ -231,12 +238,25 @@ class StaggClient:
         await self.start(client)
 
     async def start(self, client: BleakClient) -> None:
-        """Authenticate and subscribe on an already-connected client."""
+        """Authenticate and subscribe on an already-connected client.
+
+        Wrapped in a timeout so a wedged BLE stack cannot hang setup while the
+        coordinator holds its connect lock. On any failure the underlying
+        client is disconnected so it does not hold the kettle's single
+        connection slot.
+        """
         self._client = client
         self._buffer.clear()
         self._seq = 0
-        await client.start_notify(CHAR_UUID, self._handle_notify)
-        await self._write(INIT_SEQUENCE)
+        try:
+            async with asyncio.timeout(_START_TIMEOUT):
+                await client.start_notify(CHAR_UUID, self._handle_notify)
+                await self._write(INIT_SEQUENCE)
+        except BaseException:
+            self._client = None
+            with contextlib.suppress(BaseException):
+                await client.disconnect()
+            raise
         _LOGGER.info("Authenticated and subscribed to kettle notifications")
 
     async def disconnect(self) -> None:
