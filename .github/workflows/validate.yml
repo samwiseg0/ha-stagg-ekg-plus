@@ -17,6 +17,9 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+          # Skip the brands check until the icon is merged into
+          # home-assistant/brands for the stagg_ekg_plus domain.
+          ignore: brands
 
   validate-hassfest:
     runs-on: ubuntu-latest
