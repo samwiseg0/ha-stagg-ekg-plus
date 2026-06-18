@@ -16,12 +16,12 @@ Domain: `stagg_ekg_plus`. Target: Home Assistant 2026.x (Python 3.13+).
 
 ```
 custom_components/stagg_ekg_plus/
-  __init__.py        # setup/unload; entry.runtime_data = StaggCoordinator
+  __init__.py        # setup/unload; entry.runtime_data = StaggCoordinator; options update listener reloads entry
   manifest.json      # BT matchers (service 1820 + local_name FELLOW*), iot_class local_push
-  const.py           # DOMAIN, MANUFACTURER, MODEL
+  const.py           # DOMAIN, MANUFACTURER, MODEL, connection-mode + timer constants
   api.py             # PURE protocol codec + StaggClient. NO Home Assistant imports.
-  coordinator.py     # StaggCoordinator: persistent BLE conn + reconnect
-  config_flow.py     # Bluetooth auto-discovery + manual user step
+  coordinator.py     # StaggCoordinator: BLE conn + reconnect + keep-alive + on-demand
+  config_flow.py     # Bluetooth auto-discovery + manual user step + options flow (connection mode)
   entity.py          # StaggEntity base (device info, availability)
   climate.py         # target temp + heat/off; follows kettle F/C unit
   switch.py          # power
@@ -48,6 +48,34 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   back to the last known BLEDevice (`async_last_service_info`) for a directed
   connect. `update_interval=None` (no polling).
 - State is push-based: notifications -> `coordinator.async_set_updated_data(state)`.
+- On every successful connect the coordinator records `time.monotonic()`; on
+  disconnect it logs how long the link was held (`_format_duration`) at INFO.
+
+## Connection mode (user option)
+
+- Set via the Configure dialog (options flow, `StaggOptionsFlow`). Option key
+  `CONF_CONNECTION_MODE` in `entry.options`; values `persistent` (default) or
+  `on_demand`. Changing it triggers `_async_update_listener` ->
+  `async_reload(entry_id)`, so the coordinator is rebuilt with the new mode.
+- A single predicate `StaggCoordinator._wants_connection()` gates all
+  connection-holding behavior (advertisement auto-connect, backoff reconnect,
+  keep-alive). Persistent: always True. On-demand: True only while
+  `self.data.power` (kettle on).
+- **Keep-alive watchdog** (`KEEP_ALIVE_TIMEOUT`, 60s): every notification rearms
+  it via `_reset_keepalive`; if it fires the link is treated as stale and
+  dropped (`_client.disconnect()`), which routes through `_on_disconnect` ->
+  `_schedule_reconnect`. Runs whenever `_wants_connection()` and connected.
+- **On-demand idle disconnect** (`ON_DEMAND_DISCONNECT_DELAY`, 10s): when the
+  kettle reports power off, `_schedule_idle_disconnect(reset=False)` arms a
+  one-shot timer (reset=False so the kettle's periodic off-state frames do not
+  keep pushing it out). `_idle_disconnect_fired` sets `_expected_disconnect`
+  then disconnects; `_on_disconnect` sees the flag (or `not _wants_connection()`)
+  and does NOT reconnect. Commands and `_ensure_connected` schedule it with
+  reset=True as a fallback; a resulting power-on state cancels it.
+- Entity availability: `coordinator.available` = `is_connected` in persistent
+  mode, but `data is not None` in on-demand (entities keep showing last-known
+  state while the link is intentionally dropped). `entity.py` uses
+  `super().available and self.coordinator.available`.
 
 ## Bluetooth / kettle protocol facts (verified against real hardware)
 
