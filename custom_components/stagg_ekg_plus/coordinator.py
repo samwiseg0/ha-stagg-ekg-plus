@@ -92,7 +92,6 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         )
         self._cancel_keepalive: CALLBACK_TYPE | None = None
         self._cancel_idle_disconnect: CALLBACK_TYPE | None = None
-        self._expected_disconnect = False
         self._stale_disconnect = False
 
     @callback
@@ -190,12 +189,14 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             self._connected_since = None
         if self._stopping:
             return
-        expected = self._expected_disconnect
-        self._expected_disconnect = False
         stale = self._stale_disconnect
         self._stale_disconnect = False
         suffix = f" after being connected for {held}" if held else ""
-        if expected or not self._wants_connection():
+        # Whether to reconnect is decided solely by whether we still want the
+        # link. This also covers the race where an idle disconnect (armed while
+        # the kettle was off) fires just as the kettle comes on: we now want the
+        # connection, so we reconnect instead of staying dark.
+        if not self._wants_connection():
             # Intentional: on-demand idle disconnect while the kettle is off.
             # Stay disconnected until the next command or power-on.
             _LOGGER.info("Kettle %s disconnected%s", self.address, suffix)
@@ -280,10 +281,14 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     @callback
     def _idle_disconnect_fired(self, _now) -> None:
         self._cancel_idle_disconnect = None
-        if self._stopping or not self._client.is_connected:
+        # If the kettle came on between arming and firing, keep the link.
+        if (
+            self._stopping
+            or not self._client.is_connected
+            or self._wants_connection()
+        ):
             return
         _LOGGER.debug("Idle disconnect from kettle %s", self.address)
-        self._expected_disconnect = True
         self.hass.async_create_task(self._client.disconnect())
 
     @callback
@@ -330,12 +335,14 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             self._schedule_reconnect()
 
     def _get_ble_device(self) -> BLEDevice | None:
-        """Best available BLEDevice, falling back to the last one we saw.
+        """Best available BLEDevice for a connect attempt.
 
-        `async_ble_device_from_address` returns None once the kettle stops
-        advertising (~3 min idle). Falling back to the last known device lets
-        bleak-retry-connector attempt a directed connection (e.g. through an
-        ESPHome proxy) even when no current advertisement is cached.
+        Prefers a currently-advertising device, then the last service info HA
+        cached (which still works for a directed connect to an idle kettle that
+        stopped advertising, e.g. through an ESPHome proxy). Returns None when HA
+        has no record at all, rather than a stale device from a previous
+        session -- the advertisement callback will trigger a connect once the
+        kettle reappears.
         """
         device = bluetooth.async_ble_device_from_address(
             self.hass, self.address, connectable=True
@@ -348,7 +355,8 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         )
         if service_info is not None:
             self._ble_device = service_info.device
-        return self._ble_device
+            return service_info.device
+        return None
 
     async def _ensure_connected(self) -> None:
         async with self._connect_lock:
@@ -376,18 +384,34 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     async def async_set_power(self, on: bool) -> None:
         await self._ensure_command_connection()
         await self._client.set_power(on)
-        if self._on_demand:
-            self._schedule_idle_disconnect()
+        self._arm_idle_disconnect_after_command()
 
     async def async_set_target_temp(self, temp: int) -> None:
         await self._ensure_command_connection()
         await self._client.set_target_temp(temp)
-        if self._on_demand:
+        self._arm_idle_disconnect_after_command()
+
+    @callback
+    def _arm_idle_disconnect_after_command(self) -> None:
+        """On-demand: after a command, drop the link only if the kettle is off.
+
+        If the kettle is on we keep the connection (the keep-alive watchdog
+        covers a dead link); arming an idle timer here would race the live
+        state stream and could drop an active connection. A power-on command
+        still arms it transiently (last-known power is off), but the resulting
+        power-on state cancels it.
+        """
+        if self._on_demand and not self._wants_connection():
             self._schedule_idle_disconnect()
 
     async def _ensure_command_connection(self) -> None:
         """Connect for a command, raising a clear error if unreachable."""
-        await self._ensure_connected()
+        try:
+            await self._ensure_connected()
+        except Exception as err:  # noqa: BLE001 - boundary: surface as HA error
+            raise HomeAssistantError(
+                f"Kettle {self.address} is not reachable over Bluetooth"
+            ) from err
         if not self._client.is_connected:
             raise HomeAssistantError(
                 f"Kettle {self.address} is not reachable over Bluetooth"
