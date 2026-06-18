@@ -25,7 +25,7 @@ custom_components/stagg_ekg_plus/
   entity.py          # StaggEntity base (device info, availability)
   climate.py         # target temp + heat/off; follows kettle F/C unit
   switch.py          # power
-  sensor.py          # current temp (None when off), target temp, keep-warm countdown
+  sensor.py          # current temp (None when off), target temp, keep-warm countdown, rssi
   binary_sensor.py   # keep-warm (0x06), off-base (kettle lifted)
   strings.json, translations/en.json
 hacs.json

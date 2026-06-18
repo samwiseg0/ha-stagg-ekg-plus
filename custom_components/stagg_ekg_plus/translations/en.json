@@ -32,6 +32,9 @@
       },
       "countdown": {
         "name": "Auto-off timer"
+      },
+      "rssi": {
+        "name": "Signal strength"
       }
     },
     "binary_sensor": {

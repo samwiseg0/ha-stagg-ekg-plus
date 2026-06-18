@@ -21,13 +21,19 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from homeassistant.components import bluetooth
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfTemperature, UnitOfTime
+from homeassistant.const import (
+    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
+    EntityCategory,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -92,7 +98,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up the kettle sensors."""
     coordinator = entry.runtime_data
-    async_add_entities(StaggSensor(coordinator, desc) for desc in SENSORS)
+    entities: list[SensorEntity] = [StaggSensor(coordinator, desc) for desc in SENSORS]
+    entities.append(StaggRssiSensor(coordinator))
+    async_add_entities(entities)
 
 
 class StaggSensor(StaggEntity, SensorEntity):
@@ -114,3 +122,29 @@ class StaggSensor(StaggEntity, SensorEntity):
     def native_unit_of_measurement(self) -> str | None:
         data = self.coordinator.data
         return self.entity_description.unit_fn(data) if data else None
+
+
+class StaggRssiSensor(StaggEntity, SensorEntity):
+    """Signal strength of the kettle's last Bluetooth advertisement.
+
+    While the integration holds a connection the kettle does not advertise, so
+    this reflects the most recent advertised RSSI (updated on reconnects).
+    """
+
+    _attr_translation_key = "rssi"
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.address}_rssi"
+
+    @property
+    def native_value(self) -> int | None:
+        info = bluetooth.async_last_service_info(
+            self.coordinator.hass, self.coordinator.address, connectable=True
+        )
+        return info.rssi if info else None
