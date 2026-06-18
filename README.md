@@ -11,7 +11,7 @@ project, built as a HACS-installable custom integration.
 - **Climate** entity: set the target temperature and turn the kettle on/off.
 - **Switch**: power on/off.
 - **Sensors**: current temperature and target temperature.
-- **Binary sensors**: keep-warm (kettle is powered with the hold slider on) and off-base (kettle lifted off its base).
+- **Binary sensors**: holding (on when the kettle has reached the target and is keeping the water warm; off while heating up or when the hold slider is off) and off-base (kettle lifted off its base).
 - Local push: state updates stream live over Bluetooth notifications.
 - Works with a local Bluetooth adapter **or** an [ESPHome Bluetooth proxy](https://esphome.io/components/bluetooth_proxy.html).
 - Automatic Bluetooth discovery.

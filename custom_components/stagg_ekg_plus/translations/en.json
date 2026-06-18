@@ -33,7 +33,7 @@
     },
     "binary_sensor": {
       "hold": {
-        "name": "Keep warm"
+        "name": "Holding"
       },
       "off_base": {
         "name": "Off base"
