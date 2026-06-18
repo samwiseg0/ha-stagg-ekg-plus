@@ -29,6 +29,9 @@
       },
       "target_temperature": {
         "name": "Target temperature"
+      },
+      "countdown": {
+        "name": "Countdown"
       }
     },
     "binary_sensor": {

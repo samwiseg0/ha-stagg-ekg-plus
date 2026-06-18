@@ -27,7 +27,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -72,6 +72,13 @@ SENSORS: tuple[StaggSensorDescription, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         value_fn=lambda state: state.target_temp,
         unit_fn=_temp_unit,
+    ),
+    StaggSensorDescription(
+        key="countdown",
+        translation_key="countdown",
+        device_class=SensorDeviceClass.DURATION,
+        value_fn=lambda state: state.lift_countdown,
+        unit_fn=lambda state: UnitOfTime.SECONDS,
     ),
 )
 
