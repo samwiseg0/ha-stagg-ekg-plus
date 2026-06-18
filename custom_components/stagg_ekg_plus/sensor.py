@@ -77,6 +77,8 @@ SENSORS: tuple[StaggSensorDescription, ...] = (
         key="countdown",
         translation_key="countdown",
         device_class=SensorDeviceClass.DURATION,
+        suggested_unit_of_measurement=UnitOfTime.MINUTES,
+        suggested_display_precision=0,
         value_fn=lambda state: state.keep_warm_remaining,
         unit_fn=lambda state: UnitOfTime.SECONDS,
     ),

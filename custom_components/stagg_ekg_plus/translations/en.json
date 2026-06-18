@@ -31,7 +31,7 @@
         "name": "Target temperature"
       },
       "countdown": {
-        "name": "Keep warm remaining"
+        "name": "Auto-off timer"
       }
     },
     "binary_sensor": {
