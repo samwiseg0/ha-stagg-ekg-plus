@@ -1,0 +1,22 @@
+{
+  "domain": "stagg_ekg_plus",
+  "name": "Fellow Stagg EKG+",
+  "bluetooth": [
+    {
+      "service_uuid": "00001820-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "local_name": "FELLOW*"
+    }
+  ],
+  "codeowners": ["@phernandez"],
+  "config_flow": true,
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://github.com/phernandez/ha-stagg-ekg-plus",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/phernandez/ha-stagg-ekg-plus/issues",
+  "loggers": ["bleak", "bleak_retry_connector"],
+  "requirements": ["bleak-retry-connector>=3.5.0"],
+  "version": "0.1.0"
+}

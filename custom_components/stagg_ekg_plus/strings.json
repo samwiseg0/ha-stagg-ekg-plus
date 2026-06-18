@@ -1,0 +1,43 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "bluetooth_confirm": {
+        "description": "Do you want to set up {name}?"
+      },
+      "user": {
+        "description": "Select the Fellow Stagg EKG+ kettle to set up.",
+        "data": {
+          "address": "Device"
+        }
+      }
+    },
+    "abort": {
+      "no_devices_found": "No Fellow Stagg EKG+ kettles found. Make sure the kettle is powered and within range of a Bluetooth adapter or proxy, and not connected to another app or bridge.",
+      "already_configured": "This kettle is already configured."
+    }
+  },
+  "entity": {
+    "switch": {
+      "power": {
+        "name": "Power"
+      }
+    },
+    "sensor": {
+      "current_temperature": {
+        "name": "Current temperature"
+      },
+      "target_temperature": {
+        "name": "Target temperature"
+      }
+    },
+    "binary_sensor": {
+      "hold": {
+        "name": "Keep warm"
+      },
+      "off_base": {
+        "name": "Off base"
+      }
+    }
+  }
+}
