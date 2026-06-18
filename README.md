@@ -56,6 +56,39 @@ The kettle advertises as `FELLOW` followed by the last bytes of its address (for
 - Hold and unit (F/C) are physical controls on the kettle and cannot be changed over Bluetooth; they are read-only here.
 - Bluetooth LE allows only one active connection to the kettle at a time. If you previously ran the Homebridge `homebridge-stagg-ekg-plus-server` on a Pi, stop it so Home Assistant can connect.
 
+## Protocol notes (for developers)
+
+Two parts of the kettle's Bluetooth protocol were decoded by this project that the
+earlier Stagg projects (the Homebridge server and `levi/stagg-ekg-plus-ha`) either
+missed or got wrong:
+
+### Auto-off timer (state frame `0x04`)
+
+This frame is the countdown, in seconds, until the kettle powers itself off. The
+value is a **16-bit little-endian** number - it's split across two bytes with the
+*small* part sent first - and the pair is sent twice for redundancy
+(e.g. `10 0e 10 0e`). Reassemble it as `low + (high * 256)`, so `10 0e` -> `0x0e10`
+= `3600` seconds = 60 minutes.
+
+- With the **hold (keep-warm) slider on**, it starts at **3600** (60 min).
+- With hold **off** (the short post-boil warm), it starts at **300** (5 min).
+- It counts down to `0`, then the kettle shuts off; it reads `0` when not in a hold
+  window.
+
+The earlier projects read only the **first byte**, which just rolls `255 -> 0`
+every 256 seconds, so it looked like a meaningless counter. Reading both bytes
+reveals the real timer.
+
+### "Holding" flag (state frame `0x06`)
+
+This is a clean on/off flag that is **true only when the kettle has reached the
+target and is actively maintaining temperature** (keep-warm), and **false while it
+is still heating up** or off. The earlier projects ignored this byte and instead
+used `0x01` (the physical hold-slider position), which **flickers** as the heating
+element cycles on and off at setpoint. `0x06` stays steady, so it is the reliable
+"is the kettle keeping the water warm right now" signal, and it is what drives the
+**Holding** binary sensor.
+
 ## Development
 
 A standalone Bluetooth probe is included for protocol testing without Home Assistant:
