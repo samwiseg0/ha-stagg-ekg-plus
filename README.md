@@ -66,6 +66,8 @@ Go to **Settings -> Devices & Services -> Fellow Stagg EKG+ -> Configure** to ch
 
 On demand is the default because it shares the Bluetooth adapter more politely. Switch to persistent if you want always-live state or the fastest possible control while the kettle is off.
 
+> **Note:** In on-demand mode, Home Assistant cannot tell when the kettle is turned on **physically** (using the dial on the kettle itself). The kettle does not broadcast its state in its Bluetooth advertisement, so while disconnected there is no way to know it was switched on - the entities only update once you next control it from Home Assistant. If you want physical power-ons reflected live, use **persistent** mode.
+
 ## Protocol notes
 
 Two details of the kettle's Bluetooth protocol that are easy to get wrong:

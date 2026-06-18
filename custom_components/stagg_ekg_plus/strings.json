@@ -26,7 +26,7 @@
           "connection_mode": "Connection mode"
         },
         "data_description": {
-          "connection_mode": "Persistent keeps one connection open for live updates and instant control. On demand stays connected while the kettle is powered on, then disconnects a few seconds after it turns off to free the Bluetooth adapter (state is the last known value while the kettle is off)."
+          "connection_mode": "Persistent keeps one connection open for live updates and instant control. On demand stays connected while the kettle is powered on, then disconnects a few seconds after it turns off to free the Bluetooth adapter (state is the last known value while the kettle is off). Note: in on-demand mode Home Assistant cannot detect when the kettle is turned on physically, because the kettle does not broadcast its state while disconnected."
         }
       }
     }
