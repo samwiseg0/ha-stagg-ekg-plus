@@ -114,7 +114,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     def _on_disconnect(self, _client: BleakClientWithServiceCache) -> None:
         if self._stopping:
             return
-        _LOGGER.debug("Kettle %s disconnected", self.address)
+        _LOGGER.info("Kettle %s disconnected", self.address)
         self._schedule_reconnect()
 
     @callback
@@ -181,7 +181,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             if ble_device is None:
                 _LOGGER.debug("Kettle %s not currently available", self.address)
                 return
-            _LOGGER.debug("Connecting to kettle %s", self.address)
+            _LOGGER.info("Connecting to kettle %s", self.address)
             client = await establish_connection(
                 BleakClientWithServiceCache,
                 ble_device,

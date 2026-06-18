@@ -223,7 +223,7 @@ class StaggClient:
         self._seq = 0
         await client.start_notify(CHAR_UUID, self._handle_notify)
         await self._write(INIT_SEQUENCE)
-        _LOGGER.debug("Authenticated and subscribed to kettle notifications")
+        _LOGGER.info("Authenticated and subscribed to kettle notifications")
 
     async def disconnect(self) -> None:
         if self._client is not None:
