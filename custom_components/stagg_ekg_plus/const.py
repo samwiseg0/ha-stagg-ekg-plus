@@ -28,12 +28,12 @@ INITIAL_STATE_TIMEOUT = 20.0
 
 # Connection mode option (set via the integration's Configure dialog).
 CONF_CONNECTION_MODE = "connection_mode"
-# Persistent: hold one BLE connection open and stream live state (default).
+# Persistent: hold one BLE connection open and stream live state.
 CONNECTION_MODE_PERSISTENT = "persistent"
-# On demand: connect only to send a command or refresh, then disconnect to free
-# the Bluetooth adapter. State is not live between commands.
+# On demand: connect only while the kettle is powered on, then disconnect to
+# free the Bluetooth adapter (default).
 CONNECTION_MODE_ON_DEMAND = "on_demand"
-DEFAULT_CONNECTION_MODE = CONNECTION_MODE_PERSISTENT
+DEFAULT_CONNECTION_MODE = CONNECTION_MODE_ON_DEMAND
 
 # Persistent-mode keep-alive watchdog: the kettle streams state frames roughly
 # every second while connected, so if no notification arrives within this many

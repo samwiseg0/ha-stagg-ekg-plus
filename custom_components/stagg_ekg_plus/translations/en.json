@@ -34,8 +34,8 @@
   "selector": {
     "connection_mode": {
       "options": {
-        "persistent": "Persistent (live updates)",
-        "on_demand": "On demand (connect while the kettle is on)"
+        "persistent": "Persistent (always-live updates)",
+        "on_demand": "On demand (connect while the kettle is on) - default"
       }
     }
   },

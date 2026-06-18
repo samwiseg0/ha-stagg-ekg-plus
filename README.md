@@ -15,7 +15,7 @@ project, built as a HACS-installable custom integration.
 - **Binary sensors**: **Holding** (on once the kettle has reached the target and is maintaining temperature; off while heating up) and **Off base** (kettle lifted off its base). An optional **Hold enabled** sensor (the physical hold slider position) is available but disabled by default.
 - Follows the kettle's Fahrenheit/Celsius setting automatically (104-212 F / 40-100 C).
 - Local push: state updates stream live over Bluetooth notifications, with automatic reconnect.
-- Selectable **connection mode**: keep a persistent connection for live updates, or connect on demand (stays connected while the kettle is on, frees the adapter once it is off).
+- Selectable **connection mode**: connect on demand (default - stays connected while the kettle is on, frees the adapter once it is off), or keep a persistent connection for always-live updates.
 - Works with a local Bluetooth adapter **or** an [ESPHome Bluetooth proxy](https://esphome.io/components/bluetooth_proxy.html).
 - Automatic Bluetooth discovery.
 
@@ -61,10 +61,10 @@ The kettle advertises as `FELLOW` followed by the last bytes of its address (for
 
 Go to **Settings -> Devices & Services -> Fellow Stagg EKG+ -> Configure** to choose how Home Assistant talks to the kettle:
 
-- **Persistent (default):** holds one Bluetooth connection open at all times, so state updates stream live and commands take effect instantly. A keep-alive watchdog reconnects automatically if the link goes quiet. Best for most setups.
-- **On demand:** connects when you send a command and stays connected while the kettle is **powered on** (so the temperature streams live while it heats and holds). Once the kettle turns off it disconnects after a few seconds to free the Bluetooth adapter for other devices. While the kettle is off, entities show the last known state.
+- **On demand (default):** connects when you send a command and stays connected while the kettle is **powered on** (so the temperature streams live while it heats and holds). Once the kettle turns off it disconnects after a few seconds to free the Bluetooth adapter for other devices. While the kettle is off, entities show the last known state.
+- **Persistent:** holds one Bluetooth connection open at all times, so state updates stream live and commands take effect instantly. A keep-alive watchdog reconnects automatically if the link goes quiet.
 
-Use on-demand if a single Bluetooth adapter is shared with many devices and holding the kettle connection open while it is idle is a problem; otherwise leave it on persistent.
+On demand is the default because it shares the Bluetooth adapter more politely. Switch to persistent if you want always-live state or the fastest possible control while the kettle is off.
 
 ## Protocol notes
 

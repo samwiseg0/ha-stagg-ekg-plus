@@ -54,8 +54,8 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
 ## Connection mode (user option)
 
 - Set via the Configure dialog (options flow, `StaggOptionsFlow`). Option key
-  `CONF_CONNECTION_MODE` in `entry.options`; values `persistent` (default) or
-  `on_demand`. Changing it triggers `_async_update_listener` ->
+  `CONF_CONNECTION_MODE` in `entry.options`; values `on_demand` (default) or
+  `persistent`. Changing it triggers `_async_update_listener` ->
   `async_reload(entry_id)`, so the coordinator is rebuilt with the new mode.
 - A single predicate `StaggCoordinator._wants_connection()` gates all
   connection-holding behavior (advertisement auto-connect, backoff reconnect,
