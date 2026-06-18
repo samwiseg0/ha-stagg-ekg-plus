@@ -43,11 +43,14 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .api import KettleState, StaggClient
 from .const import (
     CONF_CONNECTION_MODE,
+    CONF_POLL_INTERVAL,
     CONNECTION_MODE_ON_DEMAND,
     DEFAULT_CONNECTION_MODE,
+    DEFAULT_POLL_INTERVAL,
     DOMAIN,
     KEEP_ALIVE_TIMEOUT,
     ON_DEMAND_DISCONNECT_DELAY,
+    PROBE_DISCONNECT_DELAY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,9 +92,14 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             entry.options.get(CONF_CONNECTION_MODE, DEFAULT_CONNECTION_MODE)
             == CONNECTION_MODE_ON_DEMAND
         )
+        self._poll_interval = int(
+            entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
+        )
         self._cancel_keepalive: CALLBACK_TYPE | None = None
         self._cancel_idle_disconnect: CALLBACK_TYPE | None = None
+        self._cancel_poll: CALLBACK_TYPE | None = None
         self._stale_disconnect = False
+        self._probing = False
 
     @callback
     def _handle_state(self, state: KettleState) -> None:
@@ -100,9 +108,20 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             # On demand: hold the link while the kettle is doing something
             # (powered on), and let it go once it is off/idle.
             if state.power:
+                # A probe that found the kettle on becomes a normal live
+                # session; clear the probe flag so the full grace window
+                # applies when it later turns off.
+                self._probing = False
                 self._cancel_idle_disconnect_timer()
             else:
-                self._schedule_idle_disconnect(reset=False)
+                # Drop quickly after a probe (we only needed one frame), or
+                # after the normal grace window for a user-driven session.
+                delay = (
+                    PROBE_DISCONNECT_DELAY
+                    if self._probing
+                    else ON_DEMAND_DISCONNECT_DELAY
+                )
+                self._schedule_idle_disconnect(reset=False, delay=delay)
         # Every notification proves the link is alive; restart the watchdog.
         self._reset_keepalive()
 
@@ -146,11 +165,16 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self.entry.async_on_unload(self._cancel_pending_reconnect)
         self.entry.async_on_unload(self._cancel_keepalive_timer)
         self.entry.async_on_unload(self._cancel_idle_disconnect_timer)
+        self.entry.async_on_unload(self._cancel_poll_timer)
         await self._ensure_connected()
         if not self._client.is_connected and not self._on_demand:
             # Not reachable yet; keep retrying in the background. In on-demand
             # mode we instead wait for the next command to trigger a connect.
             self._schedule_reconnect()
+        elif not self._client.is_connected and self._on_demand:
+            # On demand and idle (kettle off): start the optional background
+            # probe loop if the user enabled it.
+            self._schedule_poll()
 
     async def async_stop(self) -> None:
         """Disconnect and stop reconnecting."""
@@ -158,6 +182,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self._cancel_pending_reconnect()
         self._cancel_keepalive_timer()
         self._cancel_idle_disconnect_timer()
+        self._cancel_poll_timer()
         await self._client.disconnect()
 
     @callback
@@ -197,8 +222,11 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         if not self._wants_connection():
             # Intentional: on-demand idle disconnect while the kettle is off.
             # Stay disconnected until the next command or power-on.
+            self._probing = False
             _LOGGER.info("Kettle %s disconnected%s", self.address, suffix)
             self.async_update_listeners()
+            # Resume the optional background probe loop, if enabled.
+            self._schedule_poll()
             return
         # We want to stay connected but the link dropped on its own.
         if stale:
@@ -253,7 +281,9 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self.hass.async_create_task(self._client.disconnect())
 
     @callback
-    def _schedule_idle_disconnect(self, reset: bool = True) -> None:
+    def _schedule_idle_disconnect(
+        self, reset: bool = True, delay: float = ON_DEMAND_DISCONNECT_DELAY
+    ) -> None:
         """On-demand mode: disconnect after a short idle window.
 
         With reset=False an already-pending timer is left running, so a stream
@@ -267,7 +297,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             self._cancel_idle_disconnect()
             self._cancel_idle_disconnect = None
         self._cancel_idle_disconnect = async_call_later(
-            self.hass, ON_DEMAND_DISCONNECT_DELAY, self._idle_disconnect_fired
+            self.hass, delay, self._idle_disconnect_fired
         )
 
     @callback
@@ -320,6 +350,67 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             self._cancel_reconnect()
             self._cancel_reconnect = None
 
+    @callback
+    def _schedule_poll(self) -> None:
+        """On-demand mode: schedule the next background state probe.
+
+        Runs only while disconnected and idle (kettle believed off). A probe
+        briefly connects, reads the state, and disconnects again if the kettle
+        is still off, so a physical power-on is noticed within one interval.
+        Disabled (no-op) unless the user set a poll interval.
+        """
+        if (
+            self._stopping
+            or not self._on_demand
+            or self._poll_interval <= 0
+            or self._cancel_poll is not None
+            or self._client.is_connected
+            or self._wants_connection()
+        ):
+            return
+        self._cancel_poll = async_call_later(
+            self.hass, self._poll_interval, self._poll_timer_fired
+        )
+
+    @callback
+    def _cancel_poll_timer(self) -> None:
+        if self._cancel_poll is not None:
+            self._cancel_poll()
+            self._cancel_poll = None
+
+    @callback
+    def _poll_timer_fired(self, _now) -> None:
+        self._cancel_poll = None
+        if (
+            self._stopping
+            or self._client.is_connected
+            or self._wants_connection()
+        ):
+            # Already online; nothing to probe. Try again next interval if we
+            # fall back to the idle/disconnected state.
+            self._schedule_poll()
+            return
+        self.hass.async_create_task(self._async_probe())
+
+    async def _async_probe(self) -> None:
+        """Briefly connect to read state, then disconnect if still off.
+
+        On a successful connect the normal state handler decides what happens:
+        a powered-on kettle keeps the link, an off kettle is dropped quickly
+        (PROBE_DISCONNECT_DELAY). Probe failures are expected (the kettle is
+        off and may not be advertising) and only logged at debug.
+        """
+        self._probing = True
+        try:
+            await self._ensure_connected()
+        except Exception as err:  # noqa: BLE001 - probe failures are expected
+            _LOGGER.debug("Probe of %s failed: %s", self.address, err)
+        if not self._client.is_connected:
+            # Could not reach the kettle; the link never opened, so the
+            # _on_disconnect reschedule will not fire. Try again next interval.
+            self._probing = False
+            self._schedule_poll()
+
     async def _async_reconnect(self) -> None:
         try:
             await self._ensure_connected()
@@ -370,10 +461,17 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 disconnected_callback=self._on_disconnect,
             )
             await self._client.start(client)
+            self._cancel_poll_timer()
             self._connected_since = time.monotonic()
             self._reconnect_attempt = 0
             if self._on_demand:
-                self._schedule_idle_disconnect()
+                self._schedule_idle_disconnect(
+                    delay=(
+                        PROBE_DISCONNECT_DELAY
+                        if self._probing
+                        else ON_DEMAND_DISCONNECT_DELAY
+                    )
+                )
             else:
                 self._reset_keepalive()
 

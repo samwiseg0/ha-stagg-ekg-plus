@@ -41,11 +41,14 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     CONF_CONNECTION_MODE,
+    CONF_POLL_INTERVAL,
     CONNECTION_MODE_ON_DEMAND,
     CONNECTION_MODE_PERSISTENT,
     DEFAULT_CONNECTION_MODE,
+    DEFAULT_POLL_INTERVAL,
     DOMAIN,
     MODEL,
+    POLL_INTERVAL_OPTIONS,
 )
 
 
@@ -156,6 +159,11 @@ class StaggOptionsFlow(OptionsFlow):
         current = self.config_entry.options.get(
             CONF_CONNECTION_MODE, DEFAULT_CONNECTION_MODE
         )
+        current_poll = str(
+            self.config_entry.options.get(
+                CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
+            )
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -171,7 +179,16 @@ class StaggOptionsFlow(OptionsFlow):
                             translation_key="connection_mode",
                             mode=SelectSelectorMode.DROPDOWN,
                         )
-                    )
+                    ),
+                    vol.Required(
+                        CONF_POLL_INTERVAL, default=current_poll
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=list(POLL_INTERVAL_OPTIONS),
+                            translation_key="poll_interval",
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
                 }
             ),
         )

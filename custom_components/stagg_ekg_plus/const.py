@@ -40,3 +40,17 @@ KEEP_ALIVE_TIMEOUT = 20.0
 # On-demand mode: after connecting (for setup or a command) stay connected this
 # long to catch the resulting state push, then disconnect to free the adapter.
 ON_DEMAND_DISCONNECT_DELAY = 10.0
+
+# Optional background poll (on-demand mode only). Seconds between brief "probe"
+# connects that read the kettle's state and disconnect again if it is still off.
+# Lets Home Assistant catch a physical power-on, which the kettle does not
+# broadcast over advertisements. 0 = disabled (default).
+CONF_POLL_INTERVAL = "poll_interval"
+DEFAULT_POLL_INTERVAL = 0
+# Selectable poll periods (seconds) offered in the options flow; "0" = Off.
+POLL_INTERVAL_OPTIONS = ("0", "60", "120", "300")
+
+# When a poll-initiated probe connects and finds the kettle off, drop the link
+# after this short delay (we only needed one state frame), rather than the
+# longer ON_DEMAND_DISCONNECT_DELAY used for user-driven sessions.
+PROBE_DISCONNECT_DELAY = 2.0

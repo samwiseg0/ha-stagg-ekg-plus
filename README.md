@@ -15,7 +15,7 @@ project, built as a HACS-installable custom integration.
 - **Binary sensors**: **Holding temp** (on once the kettle has reached the target and is maintaining temperature; off while heating up) and **On base** (on when the kettle is seated on its base, off when lifted). An optional **Hold enabled** sensor (the physical hold slider position) is available but disabled by default.
 - Follows the kettle's Fahrenheit/Celsius setting automatically (104-212 F / 40-100 C).
 - Local push: state updates stream live over Bluetooth notifications, with automatic reconnect.
-- Selectable **connection mode**: connect on demand (default - stays connected while the kettle is on, frees the adapter once it is off), or keep a persistent connection for always-live updates.
+- Selectable **connection mode**: connect on demand (default - stays connected while the kettle is on, frees the adapter once it is off), or keep a persistent connection for always-live updates. On demand can optionally **poll in the background** to catch a physical power-on.
 - Works with a local Bluetooth adapter **or** an [ESPHome Bluetooth proxy](https://esphome.io/components/bluetooth_proxy.html).
 - Automatic Bluetooth discovery.
 
@@ -66,7 +66,13 @@ Go to **Settings -> Devices & Services -> Fellow Stagg EKG+ -> Configure** to ch
 
 On demand is the default because it shares the Bluetooth adapter more politely. Switch to persistent if you want always-live state or the fastest possible control while the kettle is off.
 
-> **Note:** In on-demand mode, Home Assistant cannot tell when the kettle is turned on **physically** (using the dial on the kettle itself). The kettle does not broadcast its state in its Bluetooth advertisement, so while disconnected there is no way to know it was switched on - the entities only update once you next control it from Home Assistant. If you want physical power-ons reflected live, use **persistent** mode.
+### Background poll (on demand only)
+
+With on demand selected you can also set a **Background poll** interval (Off by default, or every 1 / 2 / 5 minutes). When enabled, Home Assistant briefly reconnects on that schedule while the kettle is off, reads its state, and disconnects again within a couple of seconds if it is still off. If it finds the kettle has been switched on, it keeps the connection and streams live state as usual.
+
+This is the way to have a **physical power-on** (using the dial on the kettle) reflected in Home Assistant without holding a connection open all the time like persistent mode. A lower interval notices the change sooner but uses the Bluetooth adapter more often. Off keeps the adapter completely free, at the cost of not seeing a physical power-on until you next control the kettle from Home Assistant. The setting has no effect in persistent mode (already always connected).
+
+> **Note:** In on-demand mode with the background poll set to **Off**, Home Assistant cannot tell when the kettle is turned on **physically** (using the dial on the kettle itself). The kettle does not broadcast its state in its Bluetooth advertisement, so while disconnected there is no way to know it was switched on - the entities only update once you next control it from Home Assistant. Enable the background poll, or use **persistent** mode, if you want physical power-ons reflected automatically.
 
 ## Protocol notes
 

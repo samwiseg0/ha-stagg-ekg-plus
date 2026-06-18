@@ -18,10 +18,10 @@ Domain: `stagg_ekg_plus`. Target: Home Assistant 2026.x (Python 3.13+).
 custom_components/stagg_ekg_plus/
   __init__.py        # setup/unload; entry.runtime_data = StaggCoordinator; options update listener reloads entry
   manifest.json      # BT matchers (service 1820 + local_name FELLOW*), iot_class local_push
-  const.py           # DOMAIN, MANUFACTURER, MODEL, connection-mode + timer constants
+  const.py           # DOMAIN, MANUFACTURER, MODEL, connection-mode + poll + timer constants
   api.py             # PURE protocol codec + StaggClient. NO Home Assistant imports.
-  coordinator.py     # StaggCoordinator: BLE conn + reconnect + keep-alive + on-demand
-  config_flow.py     # Bluetooth auto-discovery + manual user step + options flow (connection mode)
+  coordinator.py     # StaggCoordinator: BLE conn + reconnect + keep-alive + on-demand + optional poll
+  config_flow.py     # Bluetooth auto-discovery + manual user step + options flow (connection mode + poll interval)
   entity.py          # StaggEntity base (device info, availability)
   climate.py         # target temp + heat/off; follows kettle F/C unit
   switch.py          # power
@@ -62,17 +62,33 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   connection-holding behavior (advertisement auto-connect, backoff reconnect,
   keep-alive). Persistent: always True. On-demand: True only while
   `self.data.power` (kettle on).
-- **Keep-alive watchdog** (`KEEP_ALIVE_TIMEOUT`, 60s): every notification rearms
-  it via `_reset_keepalive`; if it fires the link is treated as stale and
-  dropped (`_client.disconnect()`), which routes through `_on_disconnect` ->
-  `_schedule_reconnect`. Runs whenever `_wants_connection()` and connected.
+- **Keep-alive watchdog** (`KEEP_ALIVE_TIMEOUT`, 20s): every notification rearms
+  it via `_reset_keepalive`; if it fires the link is treated as stale
+  (`_stale_disconnect = True`) and dropped (`_client.disconnect()`), which routes
+  through `_on_disconnect` -> `_schedule_reconnect`. Runs whenever
+  `_wants_connection()` and connected.
 - **On-demand idle disconnect** (`ON_DEMAND_DISCONNECT_DELAY`, 10s): when the
   kettle reports power off, `_schedule_idle_disconnect(reset=False)` arms a
   one-shot timer (reset=False so the kettle's periodic off-state frames do not
-  keep pushing it out). `_idle_disconnect_fired` sets `_expected_disconnect`
-  then disconnects; `_on_disconnect` sees the flag (or `not _wants_connection()`)
-  and does NOT reconnect. Commands and `_ensure_connected` schedule it with
-  reset=True as a fallback; a resulting power-on state cancels it.
+  keep pushing it out). `_idle_disconnect_fired` disconnects; `_on_disconnect`
+  gates reconnect SOLELY on `_wants_connection()` (kettle off -> no reconnect),
+  which also fixes the race where the timer fires just as the kettle comes on.
+  Commands and `_ensure_connected` schedule it as a fallback; a resulting
+  power-on state cancels it. `_schedule_idle_disconnect(delay=...)` takes a
+  custom delay so a probe uses the shorter `PROBE_DISCONNECT_DELAY`.
+- **Background poll (on-demand only, optional)**: option key `CONF_POLL_INTERVAL`
+  in `entry.options` (string seconds; `POLL_INTERVAL_OPTIONS` = Off/60/120/300,
+  default `0` = Off). While on-demand AND disconnected AND `not
+  _wants_connection()` (kettle believed off), `_schedule_poll` arms
+  `_poll_timer_fired` every interval. `_async_probe` sets `_probing = True` and
+  calls `_ensure_connected`; connect failures log at debug (expected for an off
+  kettle). On a successful connect the normal `_handle_state` path decides: power
+  on clears `_probing` and keeps the link (becomes a live session); power off
+  arms the idle disconnect with `PROBE_DISCONNECT_DELAY` (2s) instead of 10s.
+  `_on_disconnect` reschedules the poll (and clears `_probing`) on an intentional
+  drop; `_ensure_connected` cancels the poll timer on connect. Lets HA catch a
+  physical power-on (advert carries no state) without persistent mode. No effect
+  in persistent mode.
 - Entity availability: `coordinator.available` = `is_connected` in persistent
   mode, but `data is not None` in on-demand (entities keep showing last-known
   state while the link is intentionally dropped). `entity.py` uses

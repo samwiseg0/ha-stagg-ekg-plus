@@ -23,10 +23,12 @@
         "title": "Fellow Stagg EKG+ options",
         "description": "Choose how Home Assistant keeps in touch with the kettle over Bluetooth.",
         "data": {
-          "connection_mode": "Connection mode"
+          "connection_mode": "Connection mode",
+          "poll_interval": "Background poll (on demand mode)"
         },
         "data_description": {
-          "connection_mode": "Persistent keeps one connection open at all times for live updates and instant control. On demand connects only when you control the kettle from Home Assistant, stays connected while it is on, then disconnects a few seconds after it turns off to free the Bluetooth adapter. While disconnected, entities show the last known state and Home Assistant cannot detect a physical power-on (the kettle does not broadcast its state)."
+          "connection_mode": "Persistent keeps one connection open at all times for live updates and instant control. On demand connects only when you control the kettle from Home Assistant, stays connected while it is on, then disconnects a few seconds after it turns off to free the Bluetooth adapter. While disconnected, entities show the last known state and Home Assistant cannot detect a physical power-on (the kettle does not broadcast its state).",
+          "poll_interval": "On demand mode only. How often Home Assistant briefly reconnects while the kettle is off to check whether it was turned on at the kettle. A lower value notices a physical power-on sooner but uses the Bluetooth adapter more often. Off keeps the adapter free; a physical power-on is then only noticed the next time you control the kettle from Home Assistant."
         }
       }
     }
@@ -36,6 +38,14 @@
       "options": {
         "persistent": "Persistent (always connected, live updates)",
         "on_demand": "On demand (connect when controlled) - default"
+      }
+    },
+    "poll_interval": {
+      "options": {
+        "0": "Off (default)",
+        "60": "Every 1 minute",
+        "120": "Every 2 minutes",
+        "300": "Every 5 minutes"
       }
     }
   },
