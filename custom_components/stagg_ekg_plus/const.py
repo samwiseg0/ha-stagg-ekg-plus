@@ -35,10 +35,10 @@ CONNECTION_MODE_PERSISTENT = "persistent"
 CONNECTION_MODE_ON_DEMAND = "on_demand"
 DEFAULT_CONNECTION_MODE = CONNECTION_MODE_ON_DEMAND
 
-# Persistent-mode keep-alive watchdog: the kettle streams state frames roughly
-# every second while connected, so if no notification arrives within this many
-# seconds we assume the link is stale and force a reconnect.
-KEEP_ALIVE_TIMEOUT = 60.0
+# Keep-alive watchdog: the kettle streams state frames roughly every second
+# while connected, so if no notification arrives within this many seconds we
+# assume the link is stale and force a reconnect.
+KEEP_ALIVE_TIMEOUT = 20.0
 
 # On-demand mode: after connecting (for setup or a command) stay connected this
 # long to catch the resulting state push, then disconnect to free the adapter.
