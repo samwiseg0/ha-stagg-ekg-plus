@@ -86,7 +86,10 @@ class KettleState:
     """Decoded snapshot of the kettle's reported state."""
 
     power: bool | None = None
+    # hold (0x06): keep-warm actively engaged (power AND hold slider on). Stable.
     hold: bool | None = None
+    # hold_button (0x01): physical hold slider position. Pulses when the element
+    # cycles right at setpoint, so it is decoded but not surfaced as an entity.
     hold_button: bool | None = None
     lifted: bool | None = None
     target_temp: int | None = None

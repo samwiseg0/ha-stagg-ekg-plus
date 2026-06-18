@@ -26,7 +26,7 @@ custom_components/stagg_ekg_plus/
   climate.py         # target temp + heat/off; follows kettle F/C unit
   switch.py          # power
   sensor.py          # current temp (None when off), target temp
-  binary_sensor.py   # keep-warm (hold), off-base
+  binary_sensor.py   # keep-warm (0x06), off-base (kettle lifted)
   strings.json, translations/en.json
 hacs.json
 tools/scan.py        # standalone BLE scanner to find the kettle
@@ -104,8 +104,11 @@ capture). See conversation history / git log for the exact test snippet.
 
 ## Known open items / calibration TODO
 
-- `hold` (0x06) vs `hold_button` (0x01) semantics only partially calibrated;
-  `hold` (keep-warm mode) is the one surfaced as a binary sensor.
+- `hold` (0x06) = power AND hold-slider-on = "keep-warm actively engaged";
+  verified stable in every state (controlled power/hold matrix test), so it is
+  surfaced as the Keep warm binary sensor. `hold_button` (0x01) = the physical
+  hold slider position alone (on=1/off=0, independent of heating) but it pulses
+  when the element cycles right at setpoint, so it is decoded but NOT exposed.
 - `lift_countdown` (0x04) behavior during a real lift-off timeout is unverified
   (stayed 0 during brief lifts).
 - Not yet exercised inside a running HA instance.
