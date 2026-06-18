@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from bleak.backends.device import BLEDevice
 from bleak_retry_connector import (
@@ -49,6 +50,18 @@ _LOGGER = logging.getLogger(__name__)
 _RECONNECT_BACKOFF = (5, 10, 20, 30, 60)
 
 
+def _format_duration(seconds: float) -> str:
+    """Format a number of seconds as e.g. '1h 23m 4s'."""
+    total = int(seconds)
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}h {minutes}m {secs}s"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
 class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     """Maintains a persistent BLE connection and pushes kettle state to entities."""
 
@@ -64,6 +77,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self._ble_device: BLEDevice | None = None
         self._reconnect_attempt = 0
         self._cancel_reconnect: CALLBACK_TYPE | None = None
+        self._connected_since: float | None = None
 
     @callback
     def _handle_state(self, state: KettleState) -> None:
@@ -114,7 +128,16 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     def _on_disconnect(self, _client: BleakClientWithServiceCache) -> None:
         if self._stopping:
             return
-        _LOGGER.info("Kettle %s disconnected", self.address)
+        if self._connected_since is not None:
+            held = _format_duration(time.monotonic() - self._connected_since)
+            self._connected_since = None
+            _LOGGER.info(
+                "Kettle %s disconnected after being connected for %s",
+                self.address,
+                held,
+            )
+        else:
+            _LOGGER.info("Kettle %s disconnected", self.address)
         self._schedule_reconnect()
 
     @callback
@@ -189,6 +212,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 disconnected_callback=self._on_disconnect,
             )
             await self._client.start(client)
+            self._connected_since = time.monotonic()
             self._reconnect_attempt = 0
 
     async def async_set_power(self, on: bool) -> None:
