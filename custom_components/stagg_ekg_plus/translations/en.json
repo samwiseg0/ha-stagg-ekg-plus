@@ -38,6 +38,9 @@
       "hold": {
         "name": "Holding"
       },
+      "hold_enabled": {
+        "name": "Hold enabled"
+      },
       "off_base": {
         "name": "Off base"
       }
