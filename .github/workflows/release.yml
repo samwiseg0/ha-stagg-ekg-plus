@@ -1,12 +1,16 @@
 name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
   release:
-    name: Prepare release
+    name: Publish release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -31,7 +35,10 @@ jobs:
           cd custom_components/stagg_ekg_plus
           zip -r ../../stagg_ekg_plus.zip .
 
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v1
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
           files: stagg_ekg_plus.zip
