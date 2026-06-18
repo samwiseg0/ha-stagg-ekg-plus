@@ -28,7 +28,7 @@ custom_components/stagg_ekg_plus/
   sensor.py          # current temp (None when off), target temp, auto-off timer, rssi (diag, opt-in)
   binary_sensor.py   # holding (0x06), on-base (0x08), hold-enabled (0x01, opt-in)
   strings.json, translations/en.json
-  brand/             # bundled icon.png + logo.png (HA 2026.3+ local brand images)
+  brand/             # bundled icon.png + logo.png + dark_logo.png (HA 2026.3+ local brand images)
 hacs.json
 tools/scan.py        # standalone BLE scanner to find the kettle
 tools/probe.py       # standalone connect/auth/notify decoder (calibration)
