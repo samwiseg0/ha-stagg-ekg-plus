@@ -219,15 +219,26 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     @callback
     def _on_disconnect(self, _client: BleakClientWithServiceCache) -> None:
         self._cancel_keepalive_timer()
-        held = None
-        if self._connected_since is not None:
-            held = _format_duration(time.monotonic() - self._connected_since)
-            self._connected_since = None
+        if self._connected_since is None:
+            # A disconnect callback for a connection that never became an active
+            # session: an intermediate establish_connection retry, or a drop
+            # during the auth/subscribe handshake (common when the host adapter
+            # is under stress). The in-flight connect path owns this outcome --
+            # acting here would emit spurious "disconnected" logs, reschedule
+            # polls, and clear the probe flag mid-probe. Ignore it.
+            if not self._stopping:
+                _LOGGER.debug(
+                    "Ignoring disconnect for %s before the session was active",
+                    self.address,
+                )
+            return
+        held = _format_duration(time.monotonic() - self._connected_since)
+        self._connected_since = None
         if self._stopping:
             return
         stale = self._stale_disconnect
         self._stale_disconnect = False
-        suffix = f" after being connected for {held}" if held else ""
+        suffix = f" after being connected for {held}"
         # Whether to reconnect is decided solely by whether we still want the
         # link. This also covers the race where an idle disconnect (armed while
         # the kettle was off) fires just as the kettle comes on: we now want the
