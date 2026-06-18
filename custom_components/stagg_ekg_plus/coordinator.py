@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from bleak.backends.device import BLEDevice
 from bleak_retry_connector import (
     BleakClientWithServiceCache,
     establish_connection,
@@ -33,13 +34,19 @@ from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .api import KettleState, StaggClient
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+# Reconnect backoff schedule (seconds), used when the kettle drops while idle and
+# is no longer advertising. An advertisement callback reconnects instantly when
+# the kettle reappears, resetting this backoff.
+_RECONNECT_BACKOFF = (5, 10, 20, 30, 60, 120, 300)
 
 
 class StaggCoordinator(DataUpdateCoordinator[KettleState]):
@@ -54,6 +61,9 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self._client = StaggClient(on_state=self._handle_state)
         self._connect_lock = asyncio.Lock()
         self._stopping = False
+        self._ble_device: BLEDevice | None = None
+        self._reconnect_attempt = 0
+        self._cancel_reconnect: CALLBACK_TYPE | None = None
 
     @callback
     def _handle_state(self, state: KettleState) -> None:
@@ -73,11 +83,16 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 BluetoothScanningMode.ACTIVE,
             )
         )
+        self.entry.async_on_unload(self._cancel_pending_reconnect)
         await self._ensure_connected()
+        if not self._client.is_connected:
+            # Not reachable yet; keep retrying in the background.
+            self._schedule_reconnect()
 
     async def async_stop(self) -> None:
         """Disconnect and stop reconnecting."""
         self._stopping = True
+        self._cancel_pending_reconnect()
         await self._client.disconnect()
 
     @callback
@@ -86,25 +101,83 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         service_info: BluetoothServiceInfoBleak,
         change: BluetoothChange,
     ) -> None:
-        """Reconnect when the kettle advertises again after a drop."""
+        """Track the device and reconnect instantly when it advertises."""
+        self._ble_device = service_info.device
         if self._stopping or self._client.is_connected:
             return
-        self.hass.async_create_task(self._ensure_connected())
+        # A fresh advertisement is the best moment to (re)connect.
+        self._cancel_pending_reconnect()
+        self._reconnect_attempt = 0
+        self.hass.async_create_task(self._async_reconnect())
 
     @callback
     def _on_disconnect(self, _client: BleakClientWithServiceCache) -> None:
         if self._stopping:
             return
         _LOGGER.debug("Kettle %s disconnected", self.address)
-        # Reconnection is driven by the bluetooth advertisement callback.
+        self._schedule_reconnect()
+
+    @callback
+    def _schedule_reconnect(self) -> None:
+        """Schedule a reconnect attempt with exponential backoff."""
+        if self._stopping or self._cancel_reconnect is not None:
+            return
+        delay = _RECONNECT_BACKOFF[
+            min(self._reconnect_attempt, len(_RECONNECT_BACKOFF) - 1)
+        ]
+        self._reconnect_attempt += 1
+        _LOGGER.debug("Scheduling reconnect to %s in %ss", self.address, delay)
+        self._cancel_reconnect = async_call_later(
+            self.hass, delay, self._reconnect_timer_fired
+        )
+
+    @callback
+    def _reconnect_timer_fired(self, _now) -> None:
+        self._cancel_reconnect = None
+        if self._stopping or self._client.is_connected:
+            return
+        self.hass.async_create_task(self._async_reconnect())
+
+    @callback
+    def _cancel_pending_reconnect(self) -> None:
+        if self._cancel_reconnect is not None:
+            self._cancel_reconnect()
+            self._cancel_reconnect = None
+
+    async def _async_reconnect(self) -> None:
+        try:
+            await self._ensure_connected()
+        except Exception as err:  # noqa: BLE001 - keep retrying on any failure
+            _LOGGER.debug("Reconnect to %s failed: %s", self.address, err)
+        if not self._client.is_connected and not self._stopping:
+            self._schedule_reconnect()
+
+    def _get_ble_device(self) -> BLEDevice | None:
+        """Best available BLEDevice, falling back to the last one we saw.
+
+        `async_ble_device_from_address` returns None once the kettle stops
+        advertising (~3 min idle). Falling back to the last known device lets
+        bleak-retry-connector attempt a directed connection (e.g. through an
+        ESPHome proxy) even when no current advertisement is cached.
+        """
+        device = bluetooth.async_ble_device_from_address(
+            self.hass, self.address, connectable=True
+        )
+        if device is not None:
+            self._ble_device = device
+            return device
+        service_info = bluetooth.async_last_service_info(
+            self.hass, self.address, connectable=True
+        )
+        if service_info is not None:
+            self._ble_device = service_info.device
+        return self._ble_device
 
     async def _ensure_connected(self) -> None:
         async with self._connect_lock:
             if self._stopping or self._client.is_connected:
                 return
-            ble_device = bluetooth.async_ble_device_from_address(
-                self.hass, self.address, connectable=True
-            )
+            ble_device = self._get_ble_device()
             if ble_device is None:
                 _LOGGER.debug("Kettle %s not currently available", self.address)
                 return
@@ -116,6 +189,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 disconnected_callback=self._on_disconnect,
             )
             await self._client.start(client)
+            self._reconnect_attempt = 0
 
     async def async_set_power(self, on: bool) -> None:
         await self._ensure_connected()

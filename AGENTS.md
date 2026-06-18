@@ -42,7 +42,11 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   `bleak_retry_connector.establish_connection(...)` then `StaggClient.start(client)`.
   `StaggClient.connect()` is the standalone-only convenience path.
 - Reconnection is driven by the bluetooth advertisement callback
-  (`async_register_callback`), not a polling loop. `update_interval=None`.
+  (`async_register_callback`) for instant reconnect, plus an exponential backoff
+  retry loop (`async_call_later`) so an idle kettle that stopped advertising is
+  still recovered. When no current advertisement is cached the coordinator falls
+  back to the last known BLEDevice (`async_last_service_info`) for a directed
+  connect. `update_interval=None` (no polling).
 - State is push-based: notifications -> `coordinator.async_set_updated_data(state)`.
 
 ## Bluetooth / kettle protocol facts (verified against real hardware)
