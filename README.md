@@ -15,6 +15,7 @@ project, built as a HACS-installable custom integration.
 - **Binary sensors**: **Holding** (on once the kettle has reached the target and is maintaining temperature; off while heating up) and **Off base** (kettle lifted off its base). An optional **Hold enabled** sensor (the physical hold slider position) is available but disabled by default.
 - Follows the kettle's Fahrenheit/Celsius setting automatically (104-212 F / 40-100 C).
 - Local push: state updates stream live over Bluetooth notifications, with automatic reconnect.
+- Selectable **connection mode**: keep a persistent connection for live updates, or connect on demand to free the Bluetooth adapter between commands.
 - Works with a local Bluetooth adapter **or** an [ESPHome Bluetooth proxy](https://esphome.io/components/bluetooth_proxy.html).
 - Automatic Bluetooth discovery.
 
@@ -55,6 +56,15 @@ The kettle advertises as `FELLOW` followed by the last bytes of its address (for
 - **Holding** turns on once the kettle reaches the target and starts maintaining temperature (it is off during the initial heat-up). **Auto-off timer** shows ~60 minutes when the hold slider is on, or ~5 minutes for the post-boil keep-warm without hold.
 - Hold and unit (F/C) are physical controls on the kettle and cannot be changed over Bluetooth; they are read-only here.
 - Bluetooth LE allows only one active connection to the kettle at a time. If you previously ran the Homebridge `homebridge-stagg-ekg-plus-server` on a Pi, stop it so Home Assistant can connect.
+
+## Connection mode
+
+Go to **Settings -> Devices & Services -> Fellow Stagg EKG+ -> Configure** to choose how Home Assistant talks to the kettle:
+
+- **Persistent (default):** holds one Bluetooth connection open, so state updates stream live and commands take effect instantly. A keep-alive watchdog reconnects automatically if the link goes quiet. Best for most setups.
+- **On demand:** stays disconnected and only connects when you send a command (power or temperature), then disconnects again after a few seconds. This frees the Bluetooth adapter for other devices, at the cost of live updates - entities show the last known state between commands.
+
+Use on-demand if a single Bluetooth adapter is shared with many devices and holding the kettle connection open is a problem; otherwise leave it on persistent.
 
 ## Protocol notes
 
@@ -108,6 +118,14 @@ logging on the integration (Settings -> Devices & Services -> Fellow Stagg EKG+
 -> three-dot menu -> Enable debug logging). The log then contains the raw frames
 (`rx ...`), each decoded frame (`frame 0xNN ...`), and the decoded state on every
 change (`state ...`).
+
+## AI disclosure
+
+This integration was developed with the help of AI coding tools. I am not a
+programmer by trade. Every change is reviewed by a human (me) before it is
+committed, and the integration has been tested against a real Fellow Stagg EKG+
+kettle. Issues and pull requests are welcome if you spot something that can be
+improved.
 
 ## Credits
 

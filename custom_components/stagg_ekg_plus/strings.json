@@ -17,6 +17,28 @@
       "already_configured": "This kettle is already configured."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Fellow Stagg EKG+ options",
+        "description": "Choose how Home Assistant keeps in touch with the kettle over Bluetooth.",
+        "data": {
+          "connection_mode": "Connection mode"
+        },
+        "data_description": {
+          "connection_mode": "Persistent keeps one connection open for live updates and instant control. On demand connects only when sending a command, then disconnects to free the Bluetooth adapter (state is not live between commands)."
+        }
+      }
+    }
+  },
+  "selector": {
+    "connection_mode": {
+      "options": {
+        "persistent": "Persistent (live updates)",
+        "on_demand": "On demand (connect only to send commands)"
+      }
+    }
+  },
   "entity": {
     "switch": {
       "power": {

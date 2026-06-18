@@ -47,8 +47,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: StaggConfigEntry) -> boo
         ) from err
 
     entry.runtime_data = coordinator
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+async def _async_update_listener(
+    hass: HomeAssistant, entry: StaggConfigEntry
+) -> None:
+    """Reload the entry when its options change (e.g. connection mode)."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: StaggConfigEntry) -> bool:

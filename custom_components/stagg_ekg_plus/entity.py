@@ -42,4 +42,4 @@ class StaggEntity(CoordinatorEntity[StaggCoordinator]):
 
     @property
     def available(self) -> bool:
-        return super().available and self.coordinator.is_connected
+        return super().available and self.coordinator.available

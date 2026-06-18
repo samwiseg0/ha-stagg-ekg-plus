@@ -25,3 +25,21 @@ MODEL = "Stagg EKG+"
 
 # How long to wait for the first state notification before giving up at setup.
 INITIAL_STATE_TIMEOUT = 20.0
+
+# Connection mode option (set via the integration's Configure dialog).
+CONF_CONNECTION_MODE = "connection_mode"
+# Persistent: hold one BLE connection open and stream live state (default).
+CONNECTION_MODE_PERSISTENT = "persistent"
+# On demand: connect only to send a command or refresh, then disconnect to free
+# the Bluetooth adapter. State is not live between commands.
+CONNECTION_MODE_ON_DEMAND = "on_demand"
+DEFAULT_CONNECTION_MODE = CONNECTION_MODE_PERSISTENT
+
+# Persistent-mode keep-alive watchdog: the kettle streams state frames roughly
+# every second while connected, so if no notification arrives within this many
+# seconds we assume the link is stale and force a reconnect.
+KEEP_ALIVE_TIMEOUT = 60.0
+
+# On-demand mode: after connecting (for setup or a command) stay connected this
+# long to catch the resulting state push, then disconnect to free the adapter.
+ON_DEMAND_DISCONNECT_DELAY = 10.0

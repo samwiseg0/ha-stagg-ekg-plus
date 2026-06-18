@@ -25,10 +25,28 @@ from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_discovered_service_info,
 )
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_ADDRESS
+from homeassistant.core import callback
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
-from .const import DOMAIN, MODEL
+from .const import (
+    CONF_CONNECTION_MODE,
+    CONNECTION_MODE_ON_DEMAND,
+    CONNECTION_MODE_PERSISTENT,
+    DEFAULT_CONNECTION_MODE,
+    DOMAIN,
+    MODEL,
+)
 
 
 class StaggConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -39,6 +57,12 @@ class StaggConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._discovery: BluetoothServiceInfoBleak | None = None
         self._discovered: dict[str, BluetoothServiceInfoBleak] = {}
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> StaggOptionsFlow:
+        """Return the options flow handler."""
+        return StaggOptionsFlow()
 
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
@@ -117,3 +141,37 @@ class StaggConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     def _title(info: BluetoothServiceInfoBleak) -> str:
         return f"{MODEL} ({info.address})"
+
+
+class StaggOptionsFlow(OptionsFlow):
+    """Handle options for the Fellow Stagg EKG+ integration."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Let the user pick the connection mode."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current = self.config_entry.options.get(
+            CONF_CONNECTION_MODE, DEFAULT_CONNECTION_MODE
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_CONNECTION_MODE, default=current
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                CONNECTION_MODE_PERSISTENT,
+                                CONNECTION_MODE_ON_DEMAND,
+                            ],
+                            translation_key="connection_mode",
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    )
+                }
+            ),
+        )
