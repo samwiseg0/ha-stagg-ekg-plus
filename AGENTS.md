@@ -84,7 +84,9 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   calls `_ensure_connected`; connect failures log at debug (expected for an off
   kettle). On a successful connect the normal `_handle_state` path decides: power
   on clears `_probing` and keeps the link (becomes a live session); power off
-  arms the idle disconnect with `PROBE_DISCONNECT_DELAY` (2s) instead of 10s.
+  arms the idle disconnect with `PROBE_DISCONNECT_DELAY` (5s) instead of 10s.
+  `PROBE_DISCONNECT_DELAY` also bounds the wait for the first state frame on a
+  kettle that turns out to be on, so it stays comfortably above the ~1s cadence.
   `_on_disconnect` reschedules the poll (and clears `_probing`) on an intentional
   drop; `_ensure_connected` cancels the poll timer on connect. Lets HA catch a
   physical power-on (advert carries no state) without persistent mode. No effect

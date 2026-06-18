@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 
@@ -100,6 +101,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self._cancel_poll: CALLBACK_TYPE | None = None
         self._stale_disconnect = False
         self._probing = False
+        self._probe_started: float | None = None
 
     @callback
     def _handle_state(self, state: KettleState) -> None:
@@ -108,12 +110,28 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             # On demand: hold the link while the kettle is doing something
             # (powered on), and let it go once it is off/idle.
             if state.power:
+                if self._probing and self._probe_started is not None:
+                    _LOGGER.info(
+                        "Poll of kettle %s found it on after %.1fs; keeping "
+                        "the connection",
+                        self.address,
+                        time.monotonic() - self._probe_started,
+                    )
+                    self._probe_started = None
                 # A probe that found the kettle on becomes a normal live
                 # session; clear the probe flag so the full grace window
                 # applies when it later turns off.
                 self._probing = False
                 self._cancel_idle_disconnect_timer()
             else:
+                if self._probing and self._probe_started is not None:
+                    _LOGGER.info(
+                        "Poll of kettle %s found it off after %.1fs; "
+                        "disconnecting",
+                        self.address,
+                        time.monotonic() - self._probe_started,
+                    )
+                    self._probe_started = None
                 # Drop quickly after a probe (we only needed one frame), or
                 # after the normal grace window for a user-driven session.
                 delay = (
@@ -223,6 +241,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             # Intentional: on-demand idle disconnect while the kettle is off.
             # Stay disconnected until the next command or power-on.
             self._probing = False
+            self._probe_started = None
             _LOGGER.info("Kettle %s disconnected%s", self.address, suffix)
             self.async_update_listeners()
             # Resume the optional background probe loop, if enabled.
@@ -278,7 +297,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         )
         # Drop the stale link; _on_disconnect then schedules the reconnect.
         self._stale_disconnect = True
-        self.hass.async_create_task(self._client.disconnect())
+        self.hass.async_create_task(self._async_disconnect())
 
     @callback
     def _schedule_idle_disconnect(
@@ -317,7 +336,18 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         ):
             return
         _LOGGER.debug("Idle disconnect from kettle %s", self.address)
-        self.hass.async_create_task(self._client.disconnect())
+        self.hass.async_create_task(self._async_disconnect())
+
+    async def _async_disconnect(self) -> None:
+        """Disconnect the client, suppressing benign teardown errors.
+
+        Used by the fire-and-forget timer callbacks (keep-alive watchdog and
+        idle disconnect); a failure here is not actionable and routes through
+        the disconnected callback anyway, so it should not surface as an
+        unhandled task exception.
+        """
+        with contextlib.suppress(Exception):
+            await self._client.disconnect()
 
     @callback
     def _schedule_reconnect(self) -> None:
@@ -401,6 +431,11 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         off and may not be advertising) and only logged at debug.
         """
         self._probing = True
+        self._probe_started = time.monotonic()
+        _LOGGER.info(
+            "Polling kettle %s (background check for a physical power-on)",
+            self.address,
+        )
         try:
             await self._ensure_connected()
         except Exception as err:  # noqa: BLE001 - probe failures are expected
@@ -408,7 +443,14 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         if not self._client.is_connected:
             # Could not reach the kettle; the link never opened, so the
             # _on_disconnect reschedule will not fire. Try again next interval.
+            _LOGGER.info(
+                "Poll of kettle %s could not connect after %.1fs (kettle "
+                "likely off); will retry",
+                self.address,
+                time.monotonic() - self._probe_started,
+            )
             self._probing = False
+            self._probe_started = None
             self._schedule_poll()
 
     async def _async_reconnect(self) -> None:
@@ -453,7 +495,12 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             if ble_device is None:
                 _LOGGER.debug("Kettle %s not currently available", self.address)
                 return
-            _LOGGER.info("Connecting to kettle %s", self.address)
+            if self._probing:
+                # The poll start line already announced this connect; keep the
+                # generic connect log at debug to avoid double messaging.
+                _LOGGER.debug("Connecting to kettle %s (poll)", self.address)
+            else:
+                _LOGGER.info("Connecting to kettle %s", self.address)
             client = await establish_connection(
                 BleakClientWithServiceCache,
                 ble_device,

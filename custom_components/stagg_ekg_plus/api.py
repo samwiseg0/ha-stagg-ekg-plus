@@ -200,9 +200,11 @@ def apply_frame(state: KettleState, frame_type: int, payload: bytes) -> KettleSt
     if frame_type == STATE_AUTO_OFF_COUNTDOWN:
         # 16-bit little-endian seconds, sent as [lo, hi] (repeated). The kettle's
         # auto-off countdown: 3600 (60 min) with hold on, 300 (5 min) without.
+        # A frame shorter than 2 bytes is malformed; ignore it rather than
+        # treating a lone byte as the whole value.
         if len(payload) >= 2:
             return replace(state, auto_off_remaining=payload[0] | (payload[1] << 8))
-        return replace(state, auto_off_remaining=payload[0])
+        return state
     return state
 
 

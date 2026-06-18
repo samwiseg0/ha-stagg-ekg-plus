@@ -68,7 +68,7 @@ On demand is the default because it shares the Bluetooth adapter more politely. 
 
 ### Background poll (on demand only)
 
-With on demand selected you can also set a **Background poll** interval (Off by default, or every 1 / 2 / 5 minutes). When enabled, Home Assistant briefly reconnects on that schedule while the kettle is off, reads its state, and disconnects again within a couple of seconds if it is still off. If it finds the kettle has been switched on, it keeps the connection and streams live state as usual.
+With on demand selected you can also set a **Background poll** interval (Off by default, or every 1 / 2 / 5 minutes). When enabled, Home Assistant briefly reconnects on that schedule while the kettle is off, reads its state, and disconnects again within a few seconds if it is still off. If it finds the kettle has been switched on, it keeps the connection and streams live state as usual.
 
 This is the way to have a **physical power-on** (using the dial on the kettle) reflected in Home Assistant without holding a connection open all the time like persistent mode. A lower interval notices the change sooner but uses the Bluetooth adapter more often. Off keeps the adapter completely free, at the cost of not seeing a physical power-on until you next control the kettle from Home Assistant. The setting has no effect in persistent mode (already always connected).
 

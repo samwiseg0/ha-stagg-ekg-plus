@@ -51,6 +51,8 @@ DEFAULT_POLL_INTERVAL = 0
 POLL_INTERVAL_OPTIONS = ("0", "60", "120", "300")
 
 # When a poll-initiated probe connects and finds the kettle off, drop the link
-# after this short delay (we only needed one state frame), rather than the
-# longer ON_DEMAND_DISCONNECT_DELAY used for user-driven sessions.
-PROBE_DISCONNECT_DELAY = 2.0
+# after this short delay. It doubles as the safety window for the first state
+# frame on a kettle that turns out to be on, so it must be comfortably longer
+# than the kettle's ~1s state-frame cadence; too short would disconnect a
+# powered-on kettle before its first frame arrives and miss the power-on.
+PROBE_DISCONNECT_DELAY = 5.0
