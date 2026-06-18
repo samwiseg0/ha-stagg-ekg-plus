@@ -101,10 +101,10 @@ class KettleState:
     current_temp: int | None = None
     # True = Fahrenheit, False = Celsius, None = unknown.
     fahrenheit: bool | None = None
-    # Keep-warm auto-shutoff countdown in seconds (0x04). Starts at 3600 (60 min)
-    # when keep-warm engages and counts down to 0, then the kettle powers off.
-    # 0 when not keeping warm.
-    keep_warm_remaining: int | None = None
+    # Auto-off countdown in seconds (0x04). Starts at 3600 (60 min) with the hold
+    # slider on, or 300 (5 min) without it, and counts down to 0, then the kettle
+    # powers off. 0 when not in a hold/auto-off window.
+    auto_off_remaining: int | None = None
 
 
 def build_power_command(seq: int, on: bool) -> bytes:
@@ -177,11 +177,11 @@ def apply_frame(state: KettleState, frame_type: int, payload: bytes) -> KettleSt
             return replace(state, lifted=not bool(payload[0]))
         return state
     if frame_type == STATE_KEEP_WARM_COUNTDOWN:
-        # 16-bit little-endian seconds, sent as [lo, hi] (repeated). Counts the
-        # keep-warm time remaining down from 3600 (60 min) to 0.
+        # 16-bit little-endian seconds, sent as [lo, hi] (repeated). The kettle's
+        # auto-off countdown: 3600 (60 min) with hold on, 300 (5 min) without.
         if len(payload) >= 2:
-            return replace(state, keep_warm_remaining=payload[0] | (payload[1] << 8))
-        return replace(state, keep_warm_remaining=payload[0])
+            return replace(state, auto_off_remaining=payload[0] | (payload[1] << 8))
+        return replace(state, auto_off_remaining=payload[0])
     return state
 
 

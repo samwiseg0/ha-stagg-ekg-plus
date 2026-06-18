@@ -79,7 +79,7 @@ SENSORS: tuple[StaggSensorDescription, ...] = (
         device_class=SensorDeviceClass.DURATION,
         suggested_unit_of_measurement=UnitOfTime.MINUTES,
         suggested_display_precision=0,
-        value_fn=lambda state: state.keep_warm_remaining,
+        value_fn=lambda state: state.auto_off_remaining,
         unit_fn=lambda state: UnitOfTime.SECONDS,
     ),
 )
