@@ -124,16 +124,11 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 self._probing = False
                 self._cancel_idle_disconnect_timer()
             else:
-                if self._probing and self._probe_started is not None:
-                    _LOGGER.info(
-                        "Poll of kettle %s found it off after %.1fs; "
-                        "disconnecting",
-                        self.address,
-                        time.monotonic() - self._probe_started,
-                    )
-                    self._probe_started = None
                 # Drop quickly after a probe (we only needed one frame), or
-                # after the normal grace window for a user-driven session.
+                # after the normal grace window for a user-driven session. The
+                # off-poll outcome is logged in _on_disconnect: the kettle's
+                # off state often matches the last session unchanged, so this
+                # branch (state-change driven) does not reliably run on a poll.
                 delay = (
                     PROBE_DISCONNECT_DELAY
                     if self._probing
@@ -240,9 +235,17 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         if not self._wants_connection():
             # Intentional: on-demand idle disconnect while the kettle is off.
             # Stay disconnected until the next command or power-on.
+            was_probe = self._probing
             self._probing = False
             self._probe_started = None
-            _LOGGER.info("Kettle %s disconnected%s", self.address, suffix)
+            if was_probe:
+                _LOGGER.info(
+                    "Poll of kettle %s found it off; disconnected%s",
+                    self.address,
+                    suffix,
+                )
+            else:
+                _LOGGER.info("Kettle %s disconnected%s", self.address, suffix)
             self.async_update_listeners()
             # Resume the optional background probe loop, if enabled.
             self._schedule_poll()
