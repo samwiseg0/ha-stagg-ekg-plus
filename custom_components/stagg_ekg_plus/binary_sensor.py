@@ -53,9 +53,9 @@ BINARY_SENSORS: tuple[StaggBinaryDescription, ...] = (
         value_fn=lambda state: state.hold_button,
     ),
     StaggBinaryDescription(
-        key="off_base",
-        translation_key="off_base",
-        value_fn=lambda state: state.lifted,
+        key="on_base",
+        translation_key="on_base",
+        value_fn=lambda state: not state.lifted,
     ),
 )
 

@@ -26,7 +26,7 @@ custom_components/stagg_ekg_plus/
   climate.py         # target temp + heat/off; follows kettle F/C unit
   switch.py          # power
   sensor.py          # current temp (None when off), target temp, auto-off timer, rssi (diag, opt-in)
-  binary_sensor.py   # holding (0x06), off-base (0x08), hold-enabled (0x01, opt-in)
+  binary_sensor.py   # holding (0x06), on-base (0x08), hold-enabled (0x01, opt-in)
   strings.json, translations/en.json
 hacs.json
 tools/scan.py        # standalone BLE scanner to find the kettle

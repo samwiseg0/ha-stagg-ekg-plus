@@ -12,7 +12,7 @@ project, built as a HACS-installable custom integration.
 - **Switch**: power on/off.
 - **Sensors**: current temperature, target temperature, and an **Auto-off timer** (how long until the kettle powers itself off: counts down from 60 minutes while keep-warm/hold is on, or 5 minutes after a boil without hold).
 - **Diagnostic sensor** (disabled by default): **Signal strength** (Bluetooth RSSI).
-- **Binary sensors**: **Holding** (on once the kettle has reached the target and is maintaining temperature; off while heating up) and **Off base** (kettle lifted off its base). An optional **Hold enabled** sensor (the physical hold slider position) is available but disabled by default.
+- **Binary sensors**: **Holding** (on once the kettle has reached the target and is maintaining temperature; off while heating up) and **On base** (on when the kettle is seated on its base, off when lifted). An optional **Hold enabled** sensor (the physical hold slider position) is available but disabled by default.
 - Follows the kettle's Fahrenheit/Celsius setting automatically (104-212 F / 40-100 C).
 - Local push: state updates stream live over Bluetooth notifications, with automatic reconnect.
 - Selectable **connection mode**: connect on demand (default - stays connected while the kettle is on, frees the adapter once it is off), or keep a persistent connection for always-live updates.

@@ -66,8 +66,8 @@
       "hold_enabled": {
         "name": "Hold enabled"
       },
-      "off_base": {
-        "name": "Off base"
+      "on_base": {
+        "name": "On base"
       }
     }
   }
