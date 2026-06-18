@@ -521,6 +521,14 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 self.address,
                 disconnected_callback=self._on_disconnect,
             )
+            if self._stopping:
+                # The entry was unloaded/reloaded while this connect was in
+                # flight (async_stop does not hold the connect lock). Tear the
+                # fresh client down instead of leaving a live session that would
+                # hold the kettle's single connection slot.
+                with contextlib.suppress(Exception):
+                    await client.disconnect()
+                return
             await self._client.start(client)
             self._cancel_poll_timer()
             self._connected_since = time.monotonic()
