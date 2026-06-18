@@ -241,9 +241,14 @@ class StaggClient:
         await self._client.write_gatt_char(CHAR_UUID, data, response=False)
 
     def _handle_notify(self, _sender: object, data: bytearray) -> None:
+        # Raw frames are logged at debug level so the protocol can be inspected
+        # live from within Home Assistant (enable debug logging on the
+        # integration). Useful for decoding still-unknown bytes.
+        _LOGGER.debug("rx %s", data.hex())
         self._buffer.extend(data)
         changed = False
         for frame_type, payload in parse_frames(self._buffer):
+            _LOGGER.debug("frame 0x%02x %s", frame_type, payload.hex())
             new_state = apply_frame(self.state, frame_type, payload)
             if new_state != self.state:
                 self.state = new_state
