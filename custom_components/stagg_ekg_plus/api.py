@@ -68,7 +68,7 @@ STATE_POWER = 0x00
 STATE_HOLD_BUTTON = 0x01
 STATE_TARGET_TEMP = 0x02
 STATE_CURRENT_TEMP = 0x03
-STATE_KEEP_WARM_COUNTDOWN = 0x04
+STATE_AUTO_OFF_COUNTDOWN = 0x04
 # 0x05 is always the bytes ffffffff and 0x07 is always 000000 across every EKG+
 # state (power, heating, hold, units, lift); verified constant, nothing to
 # decode. Likely fields used by other Fellow models (e.g. the EKG Pro schedule)
@@ -176,7 +176,7 @@ def apply_frame(state: KettleState, frame_type: int, payload: bytes) -> KettleSt
         if len(payload) == 3:
             return replace(state, lifted=not bool(payload[0]))
         return state
-    if frame_type == STATE_KEEP_WARM_COUNTDOWN:
+    if frame_type == STATE_AUTO_OFF_COUNTDOWN:
         # 16-bit little-endian seconds, sent as [lo, hi] (repeated). The kettle's
         # auto-off countdown: 3600 (60 min) with hold on, 300 (5 min) without.
         if len(payload) >= 2:
