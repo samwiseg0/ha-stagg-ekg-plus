@@ -78,10 +78,11 @@ STATE_HOLD_MODE = 0x06
 STATE_RESERVED_07 = 0x07
 STATE_LIFTED = 0x08
 
-# Temperature limits per Fellow's documented ranges.
+# Temperature limits. The EKG+ accepts 40-100 C / 104-212 F; values below the
+# minimum are clamped up by the kettle (verified live: 95->104, 100->104 F).
 TEMP_MIN_C = 40
 TEMP_MAX_C = 100
-TEMP_MIN_F = 140
+TEMP_MIN_F = 104
 TEMP_MAX_F = 212
 
 

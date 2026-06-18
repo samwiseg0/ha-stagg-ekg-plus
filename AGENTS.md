@@ -56,7 +56,7 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
 - Command frame: `ef dd 0a <seq> <type> <value> <checksum> <type>`
   (type 0x00 power, 0x01 temp; checksum = (seq+value) & 0xff; seq increments).
 - Temp frames send `[value, unit]` twice for redundancy. Unit byte:
-  `01` = Fahrenheit, `00` = Celsius. Ranges: F 140-212, C 40-100.
+  `01` = Fahrenheit, `00` = Celsius. Ranges: F 104-212, C 40-100.
 - `current_temp` byte `0x20` (32) is the OFF sentinel; the kettle only reports a
   real reading while powered on (entities report None when off).
 - State frame types: 0x00 power, 0x01 hold BUTTON, 0x02 target temp+unit,

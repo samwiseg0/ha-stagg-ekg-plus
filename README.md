@@ -48,7 +48,7 @@ The kettle advertises as `FELLOW` followed by the last bytes of its address (for
 
 ## Notes on behavior
 
-- The kettle reports temperatures in whatever unit it is set to on the device (Fahrenheit or Celsius). The integration follows that setting automatically. Valid ranges are 140-212 deg F / 40-100 deg C.
+- The kettle reports temperatures in whatever unit it is set to on the device (Fahrenheit or Celsius). The integration follows that setting automatically. Valid ranges are 104-212 deg F / 40-100 deg C.
 - The current-temperature reading is only available while the kettle is powered on; when off, the kettle reports a fixed sentinel value, so the integration reports it as unavailable.
 
 ## Development
