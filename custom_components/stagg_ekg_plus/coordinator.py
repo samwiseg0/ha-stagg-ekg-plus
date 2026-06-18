@@ -92,6 +92,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self._cancel_keepalive: CALLBACK_TYPE | None = None
         self._cancel_idle_disconnect: CALLBACK_TYPE | None = None
         self._expected_disconnect = False
+        self._stale_disconnect = False
 
     @callback
     def _handle_state(self, state: KettleState) -> None:
@@ -182,26 +183,35 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     @callback
     def _on_disconnect(self, _client: BleakClientWithServiceCache) -> None:
         self._cancel_keepalive_timer()
+        held = None
         if self._connected_since is not None:
             held = _format_duration(time.monotonic() - self._connected_since)
             self._connected_since = None
-            _LOGGER.info(
-                "Kettle %s disconnected after being connected for %s",
-                self.address,
-                held,
-            )
-        else:
-            _LOGGER.info("Kettle %s disconnected", self.address)
-        # An intentional disconnect (idle timeout, keep-alive reset, or stop)
-        # must not trigger the auto-reconnect path.
-        if self._stopping or self._expected_disconnect:
-            self._expected_disconnect = False
+        if self._stopping:
             return
-        if not self._wants_connection():
-            # On-demand and the kettle is off; stay disconnected until the next
-            # command or until it is turned on again.
+        expected = self._expected_disconnect
+        self._expected_disconnect = False
+        stale = self._stale_disconnect
+        self._stale_disconnect = False
+        suffix = f" after being connected for {held}" if held else ""
+        if expected or not self._wants_connection():
+            # Intentional: on-demand idle disconnect while the kettle is off.
+            # Stay disconnected until the next command or power-on.
+            _LOGGER.info("Kettle %s disconnected%s", self.address, suffix)
             self.async_update_listeners()
             return
+        # We want to stay connected but the link dropped on its own.
+        if stale:
+            # The keep-alive watchdog already logged why at INFO.
+            _LOGGER.info(
+                "Kettle %s disconnected%s; reconnecting", self.address, suffix
+            )
+        else:
+            _LOGGER.warning(
+                "Kettle %s unexpectedly disconnected%s; reconnecting",
+                self.address,
+                suffix,
+            )
         self._schedule_reconnect()
 
     @callback
@@ -239,6 +249,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             int(KEEP_ALIVE_TIMEOUT),
         )
         # Drop the stale link; _on_disconnect then schedules the reconnect.
+        self._stale_disconnect = True
         self.hass.async_create_task(self._client.disconnect())
 
     @callback
