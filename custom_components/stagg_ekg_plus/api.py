@@ -253,5 +253,7 @@ class StaggClient:
             if new_state != self.state:
                 self.state = new_state
                 changed = True
-        if changed and self._on_state is not None:
-            self._on_state(self.state)
+        if changed:
+            _LOGGER.debug("state %s", self.state)
+            if self._on_state is not None:
+                self._on_state(self.state)
