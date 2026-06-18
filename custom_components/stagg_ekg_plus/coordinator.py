@@ -36,6 +36,7 @@ from homeassistant.components.bluetooth import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -373,13 +374,21 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 self._reset_keepalive()
 
     async def async_set_power(self, on: bool) -> None:
-        await self._ensure_connected()
+        await self._ensure_command_connection()
         await self._client.set_power(on)
         if self._on_demand:
             self._schedule_idle_disconnect()
 
     async def async_set_target_temp(self, temp: int) -> None:
-        await self._ensure_connected()
+        await self._ensure_command_connection()
         await self._client.set_target_temp(temp)
         if self._on_demand:
             self._schedule_idle_disconnect()
+
+    async def _ensure_command_connection(self) -> None:
+        """Connect for a command, raising a clear error if unreachable."""
+        await self._ensure_connected()
+        if not self._client.is_connected:
+            raise HomeAssistantError(
+                f"Kettle {self.address} is not reachable over Bluetooth"
+            )
