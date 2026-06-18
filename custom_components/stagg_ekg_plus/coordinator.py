@@ -82,7 +82,6 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self._client = StaggClient(on_state=self._handle_state)
         self._connect_lock = asyncio.Lock()
         self._stopping = False
-        self._ble_device: BLEDevice | None = None
         self._reconnect_attempt = 0
         self._cancel_reconnect: CALLBACK_TYPE | None = None
         self._connected_since: float | None = None
@@ -167,8 +166,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         service_info: BluetoothServiceInfoBleak,
         change: BluetoothChange,
     ) -> None:
-        """Track the device and reconnect instantly when it advertises."""
-        self._ble_device = service_info.device
+        """Reconnect instantly when the kettle advertises."""
         if (
             self._stopping
             or self._client.is_connected
@@ -348,13 +346,11 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             self.hass, self.address, connectable=True
         )
         if device is not None:
-            self._ble_device = device
             return device
         service_info = bluetooth.async_last_service_info(
             self.hass, self.address, connectable=True
         )
         if service_info is not None:
-            self._ble_device = service_info.device
             return service_info.device
         return None
 

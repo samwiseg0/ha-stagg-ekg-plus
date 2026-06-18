@@ -23,9 +23,6 @@ DOMAIN = "stagg_ekg_plus"
 MANUFACTURER = "Fellow"
 MODEL = "Stagg EKG+"
 
-# How long to wait for the first state notification before giving up at setup.
-INITIAL_STATE_TIMEOUT = 20.0
-
 # Connection mode option (set via the integration's Configure dialog).
 CONF_CONNECTION_MODE = "connection_mode"
 # Persistent: hold one BLE connection open and stream live state.
