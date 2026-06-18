@@ -132,9 +132,11 @@ improved.
 Protocol reverse engineering by
 [philscott-dev](https://github.com/philscott-dev/homebridge-stagg-ekg-plus-server),
 [tlyakhov](https://github.com/tlyakhov/fellow-stagg-ekg-plus), and
-[levi](https://github.com/levi/stagg-ekg-plus-ha). The keep-warm/auto-off timer
-(`0x04`) decoding and the stable holding signal (`0x06`) were worked out for this
-integration.
+[levi](https://github.com/levi/stagg-ekg-plus-ha). tlyakhov originally identified
+the `0x04` countdown and `0x06` hold-mode state frames. This integration
+corrected the `0x04` decode (it is the 16-bit little-endian auto-off timer, not
+just a lift countdown) and pinned down the exact `0x06` "actively holding"
+semantics.
 
 ## License
 
