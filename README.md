@@ -21,13 +21,15 @@ project, built as a HACS-installable custom integration.
 - Home Assistant 2024.8 or newer.
 - A Bluetooth adapter on the Home Assistant host, or an ESPHome Bluetooth proxy within range of the kettle.
 
-> **Important:** Bluetooth LE allows only one active connection to the kettle at a time. If you previously used the Homebridge plugin and its companion `homebridge-stagg-ekg-plus-server` on a Raspberry Pi, **stop/decommission that server first** (e.g. `pm2 stop homebridge-stagg-ekg-plus-server`). While it holds the connection, Home Assistant cannot reach the kettle.
+> **Important:** Bluetooth LE allows only one active connection to the kettle at a time.
 
 ## Installation
 
 ### HACS (recommended)
 
-1. In HACS, add this repository as a custom repository (category: Integration).
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=samwiseg0&repository=ha-stagg-ekg-plus&category=integration)
+
+1. Click the button above (or in HACS, add this repository as a custom repository with category **Integration**).
 2. Install **Fellow Stagg EKG+**.
 3. Restart Home Assistant.
 
