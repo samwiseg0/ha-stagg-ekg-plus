@@ -52,7 +52,7 @@ The kettle advertises as `FELLOW` followed by the last bytes of its address (for
 ## Notes on behavior
 
 - The kettle reports temperatures in whatever unit it is set to on the device (Fahrenheit or Celsius). The integration follows that setting automatically, including if you flip the physical F/C switch while it is running. Valid ranges are 104-212 deg F / 40-100 deg C.
-- The current-temperature reading is only available while the kettle is powered on; when off, the kettle reports a fixed sentinel value, so the integration reports it as unavailable.
+- The current-temperature reading is only available while the kettle is actively measuring; when it is off **or lifted off its base**, the kettle reports a fixed sentinel value (32), so the integration reports it as unavailable.
 - **Holding** turns on once the kettle reaches the target and starts maintaining temperature (it is off during the initial heat-up). **Auto-off timer** shows ~60 minutes when the hold slider is on, or ~5 minutes for the post-boil keep-warm without hold.
 - Hold and unit (F/C) are physical controls on the kettle and cannot be changed over Bluetooth; they are read-only here.
 - Bluetooth LE allows only one active connection to the kettle at a time. If you previously ran the Homebridge `homebridge-stagg-ekg-plus-server` on a Pi, stop it so Home Assistant can connect.

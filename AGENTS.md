@@ -90,7 +90,9 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
 - Temp frames send `[value, unit]` twice for redundancy. Unit byte:
   `01` = Fahrenheit, `00` = Celsius. Ranges: F 104-212, C 40-100.
 - `current_temp` byte `0x20` (32) is the OFF sentinel; the kettle only reports a
-  real reading while powered on (entities report None when off).
+  real reading while actively measuring. It reads `0x20` when powered off OR when
+  powered on but lifted off the base. `api.py` decodes `0x20` to `current_temp =
+  None` (entities report unavailable in both cases).
 - State frame types: 0x00 power, 0x01 hold BUTTON, 0x02 target temp+unit,
   0x03 current temp+unit, 0x04 auto-off countdown (16-bit LE seconds, sent as
   [lo,hi] twice; 3600 = 60 min with the hold slider on, 300 = 5 min without it,

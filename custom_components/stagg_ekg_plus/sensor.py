@@ -61,8 +61,9 @@ def _temp_unit(state: KettleState) -> str:
 
 
 def _current_temp(state: KettleState) -> int | None:
-    # The kettle only reports a real reading while powered on.
-    return state.current_temp if state.power else None
+    # current_temp is already None unless the kettle is actively measuring
+    # (the decoder maps the 0x20 off/off-base sentinel to None).
+    return state.current_temp
 
 
 SENSORS: tuple[StaggSensorDescription, ...] = (
