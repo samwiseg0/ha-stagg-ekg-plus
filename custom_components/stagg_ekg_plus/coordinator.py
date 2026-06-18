@@ -45,8 +45,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # Reconnect backoff schedule (seconds), used when the kettle drops while idle and
 # is no longer advertising. An advertisement callback reconnects instantly when
-# the kettle reappears, resetting this backoff.
-_RECONNECT_BACKOFF = (5, 10, 20, 30, 60, 120, 300)
+# the kettle reappears, resetting this backoff. Capped at 60s.
+_RECONNECT_BACKOFF = (5, 10, 20, 30, 60)
 
 
 class StaggCoordinator(DataUpdateCoordinator[KettleState]):
