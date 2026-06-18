@@ -10,9 +10,11 @@ project, built as a HACS-installable custom integration.
 
 - **Climate** entity: set the target temperature and turn the kettle on/off.
 - **Switch**: power on/off.
-- **Sensors**: current temperature, target temperature, and an auto-off timer (counts down from 60 minutes of keep-warm before the kettle shuts off).
-- **Binary sensors**: holding (on when the kettle has reached the target and is keeping the water warm; off while heating up or when the hold slider is off) and off-base (kettle lifted off its base).
-- Local push: state updates stream live over Bluetooth notifications.
+- **Sensors**: current temperature, target temperature, and an **Auto-off timer** (how long until the kettle powers itself off: counts down from 60 minutes while keep-warm/hold is on, or 5 minutes after a boil without hold).
+- **Diagnostic sensor** (disabled by default): **Signal strength** (Bluetooth RSSI).
+- **Binary sensors**: **Holding** (on once the kettle has reached the target and is maintaining temperature; off while heating up) and **Off base** (kettle lifted off its base). An optional **Hold enabled** sensor (the physical hold slider position) is available but disabled by default.
+- Follows the kettle's Fahrenheit/Celsius setting automatically (104-212 F / 40-100 C).
+- Local push: state updates stream live over Bluetooth notifications, with automatic reconnect.
 - Works with a local Bluetooth adapter **or** an [ESPHome Bluetooth proxy](https://esphome.io/components/bluetooth_proxy.html).
 - Automatic Bluetooth discovery.
 
@@ -48,8 +50,11 @@ The kettle advertises as `FELLOW` followed by the last bytes of its address (for
 
 ## Notes on behavior
 
-- The kettle reports temperatures in whatever unit it is set to on the device (Fahrenheit or Celsius). The integration follows that setting automatically. Valid ranges are 104-212 deg F / 40-100 deg C.
+- The kettle reports temperatures in whatever unit it is set to on the device (Fahrenheit or Celsius). The integration follows that setting automatically, including if you flip the physical F/C switch while it is running. Valid ranges are 104-212 deg F / 40-100 deg C.
 - The current-temperature reading is only available while the kettle is powered on; when off, the kettle reports a fixed sentinel value, so the integration reports it as unavailable.
+- **Holding** turns on once the kettle reaches the target and starts maintaining temperature (it is off during the initial heat-up). **Auto-off timer** shows ~60 minutes when the hold slider is on, or ~5 minutes for the post-boil keep-warm without hold.
+- Hold and unit (F/C) are physical controls on the kettle and cannot be changed over Bluetooth; they are read-only here.
+- Bluetooth LE allows only one active connection to the kettle at a time. If you previously ran the Homebridge `homebridge-stagg-ekg-plus-server` on a Pi, stop it so Home Assistant can connect.
 
 ## Development
 
@@ -66,11 +71,22 @@ python3 -m venv .venv
 The protocol codec lives in `custom_components/stagg_ekg_plus/api.py` and has no
 Home Assistant dependencies, so it can be exercised directly.
 
+### Debug logging
+
+To inspect the raw Bluetooth protocol from inside Home Assistant, enable debug
+logging on the integration (Settings -> Devices & Services -> Fellow Stagg EKG+
+-> three-dot menu -> Enable debug logging). The log then contains the raw frames
+(`rx ...`), each decoded frame (`frame 0xNN ...`), and the decoded state on every
+change (`state ...`).
+
 ## Credits
 
 Protocol reverse engineering by
-[philscott-dev](https://github.com/philscott-dev/homebridge-stagg-ekg-plus-server)
-and [tlyakhov](https://github.com/tlyakhov/fellow-stagg-ekg-plus).
+[philscott-dev](https://github.com/philscott-dev/homebridge-stagg-ekg-plus-server),
+[tlyakhov](https://github.com/tlyakhov/fellow-stagg-ekg-plus), and
+[levi](https://github.com/levi/stagg-ekg-plus-ha). The keep-warm/auto-off timer
+(`0x04`) decoding and the stable holding signal (`0x06`) were worked out for this
+integration.
 
 ## License
 

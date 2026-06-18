@@ -25,8 +25,8 @@ custom_components/stagg_ekg_plus/
   entity.py          # StaggEntity base (device info, availability)
   climate.py         # target temp + heat/off; follows kettle F/C unit
   switch.py          # power
-  sensor.py          # current temp (None when off), target temp, keep-warm countdown, rssi
-  binary_sensor.py   # keep-warm (0x06), off-base (kettle lifted)
+  sensor.py          # current temp (None when off), target temp, auto-off timer, rssi (diag, opt-in)
+  binary_sensor.py   # holding (0x06), off-base (0x08), hold-enabled (0x01, opt-in)
   strings.json, translations/en.json
 hacs.json
 tools/scan.py        # standalone BLE scanner to find the kettle
@@ -64,10 +64,11 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
 - `current_temp` byte `0x20` (32) is the OFF sentinel; the kettle only reports a
   real reading while powered on (entities report None when off).
 - State frame types: 0x00 power, 0x01 hold BUTTON, 0x02 target temp+unit,
-  0x03 current temp+unit, 0x04 keep-warm countdown (16-bit LE seconds, sent as
-  [lo,hi] twice; starts at 3600 = 60 min and counts down to 0, then auto-off;
-  0 when not keeping warm), 0x05 marker (ffffffff), 0x06 hold MODE (keep-warm),
-  0x07 reserved (000000), 0x08 base presence.
+  0x03 current temp+unit, 0x04 auto-off countdown (16-bit LE seconds, sent as
+  [lo,hi] twice; 3600 = 60 min with the hold slider on, 300 = 5 min without it,
+  counts down to 0 then the kettle powers off; 0 when not in a hold window),
+  0x05 marker (ffffffff), 0x06 hold MODE (keep-warm), 0x07 reserved (000000),
+  0x08 base presence.
   0x05 and 0x07 are verified constant across every EKG+ state (nothing to decode).
 - **0x08 is inverted vs intuition: byte `0x01` = ON BASE, `0x00` = lifted off
   base** (verified by physical lift test). `api.py` exposes `lifted = not byte`.
@@ -111,15 +112,22 @@ capture). See conversation history / git log for the exact test snippet.
 
 ## Known open items / calibration TODO
 
-- `hold` (0x06) = power AND hold-slider-on = "keep-warm actively engaged";
-  verified stable in every state (controlled power/hold matrix test), so it is
-  surfaced as the Keep warm binary sensor. `hold_button` (0x01) = the physical
-  hold slider position alone (on=1/off=0, independent of heating) but it pulses
-  when the element cycles right at setpoint, so it is decoded but NOT exposed.
-- `lift_countdown` (0x04) is actually the keep-warm auto-off timer: 16-bit
-  little-endian seconds from 3600 (60 min) to 0. Decoded live from HA debug logs;
-  surfaced as the Keep warm remaining duration sensor.
-- Not yet exercised inside a running HA instance.
+- `hold` (0x06) = "actively holding/maintaining temperature": True once at
+  target and maintaining (incl. the 5-min post-hold window with the slider off),
+  False while heating up (current < target) or off. Surfaced as the **Holding**
+  binary sensor. `hold_button` (0x01) = the physical hold slider position alone
+  (on=1/off=0); it pulses when the element cycles right at setpoint, so it is
+  surfaced as **Hold enabled** but disabled by default.
+- `auto_off_remaining` (0x04) = the auto-off countdown, 16-bit little-endian
+  seconds: 3600 (60 min) with the hold slider on, 300 (5 min) without. Surfaced
+  as the **Auto-off timer** duration sensor (native seconds, suggested minutes).
+- RSSI is exposed as a diagnostic **Signal strength** sensor (disabled by
+  default) via `bluetooth.async_last_service_info`; it reflects the last
+  advertised RSSI, not a live value (the kettle does not advertise while
+  connected).
+- No BLE write command for hold or units exists in any reverse-engineering
+  reference; both are physical-only on this kettle.
+- Not yet exercised against the HA test suite (no HA in the local venv).
 
 ## Credits
 
