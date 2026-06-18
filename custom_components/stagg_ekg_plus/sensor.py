@@ -47,7 +47,9 @@ class StaggSensorDescription(SensorEntityDescription):
     """Describes a Stagg sensor."""
 
     value_fn: Callable[[KettleState], int | None]
-    unit_fn: Callable[[KettleState], str]
+    # Dynamic native unit (e.g. F/C that follows the kettle). When None, the
+    # static native_unit_of_measurement from the description is used instead.
+    unit_fn: Callable[[KettleState], str] | None = None
 
 
 def _temp_unit(state: KettleState) -> str:
@@ -83,10 +85,10 @@ SENSORS: tuple[StaggSensorDescription, ...] = (
         key="countdown",
         translation_key="countdown",
         device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.SECONDS,
         suggested_unit_of_measurement=UnitOfTime.MINUTES,
         suggested_display_precision=0,
         value_fn=lambda state: state.auto_off_remaining,
-        unit_fn=lambda state: UnitOfTime.SECONDS,
     ),
 )
 
@@ -120,6 +122,8 @@ class StaggSensor(StaggEntity, SensorEntity):
 
     @property
     def native_unit_of_measurement(self) -> str | None:
+        if self.entity_description.unit_fn is None:
+            return self.entity_description.native_unit_of_measurement
         data = self.coordinator.data
         return self.entity_description.unit_fn(data) if data else None
 
