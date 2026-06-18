@@ -61,7 +61,8 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   real reading while powered on (entities report None when off).
 - State frame types: 0x00 power, 0x01 hold BUTTON, 0x02 target temp+unit,
   0x03 current temp+unit, 0x04 lift countdown, 0x05 marker (ffffffff),
-  0x06 hold MODE (keep-warm), 0x08 base presence.
+  0x06 hold MODE (keep-warm), 0x07 reserved (000000), 0x08 base presence.
+  0x05 and 0x07 are verified constant across every EKG+ state (nothing to decode).
 - **0x08 is inverted vs intuition: byte `0x01` = ON BASE, `0x00` = lifted off
   base** (verified by physical lift test). `api.py` exposes `lifted = not byte`.
 - The one-time auth echo also arrives as an oversized `0x08` frame; the periodic

@@ -69,9 +69,13 @@ STATE_HOLD_BUTTON = 0x01
 STATE_TARGET_TEMP = 0x02
 STATE_CURRENT_TEMP = 0x03
 STATE_LIFT_COUNTDOWN = 0x04
-STATE_UNKNOWN_05 = 0x05
+# 0x05 is always the bytes ffffffff and 0x07 is always 000000 across every EKG+
+# state (power, heating, hold, units, lift); verified constant, nothing to
+# decode. Likely fields used by other Fellow models (e.g. the EKG Pro schedule)
+# that are inert here. 0x05 doubles as the per-cycle delimiter.
+STATE_CYCLE_MARKER = 0x05
 STATE_HOLD_MODE = 0x06
-STATE_UNKNOWN_07 = 0x07
+STATE_RESERVED_07 = 0x07
 STATE_LIFTED = 0x08
 
 # Temperature limits per Fellow's documented ranges.
