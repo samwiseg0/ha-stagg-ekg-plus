@@ -26,7 +26,7 @@
           "connection_mode": "Connection mode"
         },
         "data_description": {
-          "connection_mode": "Persistent keeps one connection open for live updates and instant control. On demand connects only when sending a command, then disconnects to free the Bluetooth adapter (state is not live between commands)."
+          "connection_mode": "Persistent keeps one connection open for live updates and instant control. On demand stays connected while the kettle is powered on, then disconnects a few seconds after it turns off to free the Bluetooth adapter (state is the last known value while the kettle is off)."
         }
       }
     }
@@ -35,7 +35,7 @@
     "connection_mode": {
       "options": {
         "persistent": "Persistent (live updates)",
-        "on_demand": "On demand (connect only to send commands)"
+        "on_demand": "On demand (connect while the kettle is on)"
       }
     }
   },

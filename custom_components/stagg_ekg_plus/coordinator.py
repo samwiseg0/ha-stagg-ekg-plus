@@ -96,6 +96,13 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     @callback
     def _handle_state(self, state: KettleState) -> None:
         self.async_set_updated_data(state)
+        if self._on_demand:
+            # On demand: hold the link while the kettle is doing something
+            # (powered on), and let it go once it is off/idle.
+            if state.power:
+                self._cancel_idle_disconnect_timer()
+            else:
+                self._schedule_idle_disconnect(reset=False)
         # Every notification proves the link is alive; restart the watchdog.
         self._reset_keepalive()
 
@@ -103,13 +110,24 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     def is_connected(self) -> bool:
         return self._client.is_connected
 
+    def _wants_connection(self) -> bool:
+        """Whether we want to hold an open connection right now.
+
+        Persistent mode always wants the link. On-demand mode wants it only
+        while the kettle is powered on, so live temperature streams while it is
+        heating/holding and the adapter is freed once it turns off.
+        """
+        if not self._on_demand:
+            return True
+        return bool(self.data and self.data.power)
+
     @property
     def available(self) -> bool:
         """Whether entities should report as available.
 
-        In on-demand mode the link is intentionally dropped between commands, so
-        availability follows whether we have any state rather than the live
-        connection. In persistent mode availability tracks the connection.
+        In on-demand mode the link is intentionally dropped while the kettle is
+        off, so availability follows whether we have any state rather than the
+        live connection. In persistent mode availability tracks the connection.
         """
         if self._on_demand:
             return self.data is not None
@@ -150,7 +168,11 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     ) -> None:
         """Track the device and reconnect instantly when it advertises."""
         self._ble_device = service_info.device
-        if self._stopping or self._on_demand or self._client.is_connected:
+        if (
+            self._stopping
+            or self._client.is_connected
+            or not self._wants_connection()
+        ):
             return
         # A fresh advertisement is the best moment to (re)connect.
         self._cancel_pending_reconnect()
@@ -175,17 +197,22 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         if self._stopping or self._expected_disconnect:
             self._expected_disconnect = False
             return
-        if self._on_demand:
-            # Stay disconnected; the next command reconnects on demand.
+        if not self._wants_connection():
+            # On-demand and the kettle is off; stay disconnected until the next
+            # command or until it is turned on again.
             self.async_update_listeners()
             return
         self._schedule_reconnect()
 
     @callback
     def _reset_keepalive(self) -> None:
-        """(Re)arm the persistent-mode keep-alive watchdog."""
+        """(Re)arm the keep-alive watchdog while we want an open link."""
         self._cancel_keepalive_timer()
-        if self._stopping or self._on_demand or not self._client.is_connected:
+        if (
+            self._stopping
+            or not self._client.is_connected
+            or not self._wants_connection()
+        ):
             return
         self._cancel_keepalive = async_call_later(
             self.hass, KEEP_ALIVE_TIMEOUT, self._keepalive_timer_fired
@@ -200,7 +227,11 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     @callback
     def _keepalive_timer_fired(self, _now) -> None:
         self._cancel_keepalive = None
-        if self._stopping or self._on_demand or not self._client.is_connected:
+        if (
+            self._stopping
+            or not self._client.is_connected
+            or not self._wants_connection()
+        ):
             return
         _LOGGER.info(
             "No data from kettle %s in %ss; forcing a reconnect",
@@ -211,11 +242,19 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self.hass.async_create_task(self._client.disconnect())
 
     @callback
-    def _schedule_idle_disconnect(self) -> None:
-        """On-demand mode: disconnect after a short idle window."""
-        self._cancel_idle_disconnect_timer()
+    def _schedule_idle_disconnect(self, reset: bool = True) -> None:
+        """On-demand mode: disconnect after a short idle window.
+
+        With reset=False an already-pending timer is left running, so a stream
+        of "kettle off" frames does not keep pushing the disconnect out.
+        """
         if self._stopping or not self._on_demand:
             return
+        if self._cancel_idle_disconnect is not None:
+            if not reset:
+                return
+            self._cancel_idle_disconnect()
+            self._cancel_idle_disconnect = None
         self._cancel_idle_disconnect = async_call_later(
             self.hass, ON_DEMAND_DISCONNECT_DELAY, self._idle_disconnect_fired
         )
@@ -252,7 +291,11 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     @callback
     def _reconnect_timer_fired(self, _now) -> None:
         self._cancel_reconnect = None
-        if self._stopping or self._client.is_connected:
+        if (
+            self._stopping
+            or self._client.is_connected
+            or not self._wants_connection()
+        ):
             return
         self.hass.async_create_task(self._async_reconnect())
 
@@ -267,7 +310,11 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             await self._ensure_connected()
         except Exception as err:  # noqa: BLE001 - keep retrying on any failure
             _LOGGER.debug("Reconnect to %s failed: %s", self.address, err)
-        if not self._client.is_connected and not self._stopping:
+        if (
+            not self._client.is_connected
+            and not self._stopping
+            and self._wants_connection()
+        ):
             self._schedule_reconnect()
 
     def _get_ble_device(self) -> BLEDevice | None:
