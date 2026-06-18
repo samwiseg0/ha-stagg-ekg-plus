@@ -68,7 +68,7 @@ STATE_POWER = 0x00
 STATE_HOLD_BUTTON = 0x01
 STATE_TARGET_TEMP = 0x02
 STATE_CURRENT_TEMP = 0x03
-STATE_LIFT_COUNTDOWN = 0x04
+STATE_KEEP_WARM_COUNTDOWN = 0x04
 # 0x05 is always the bytes ffffffff and 0x07 is always 000000 across every EKG+
 # state (power, heating, hold, units, lift); verified constant, nothing to
 # decode. Likely fields used by other Fellow models (e.g. the EKG Pro schedule)
@@ -101,7 +101,10 @@ class KettleState:
     current_temp: int | None = None
     # True = Fahrenheit, False = Celsius, None = unknown.
     fahrenheit: bool | None = None
-    lift_countdown: int | None = None
+    # Keep-warm auto-shutoff countdown in seconds (0x04). Starts at 3600 (60 min)
+    # when keep-warm engages and counts down to 0, then the kettle powers off.
+    # 0 when not keeping warm.
+    keep_warm_remaining: int | None = None
 
 
 def build_power_command(seq: int, on: bool) -> bytes:
@@ -173,8 +176,12 @@ def apply_frame(state: KettleState, frame_type: int, payload: bytes) -> KettleSt
         if len(payload) == 3:
             return replace(state, lifted=not bool(payload[0]))
         return state
-    if frame_type == STATE_LIFT_COUNTDOWN:
-        return replace(state, lift_countdown=payload[0])
+    if frame_type == STATE_KEEP_WARM_COUNTDOWN:
+        # 16-bit little-endian seconds, sent as [lo, hi] (repeated). Counts the
+        # keep-warm time remaining down from 3600 (60 min) to 0.
+        if len(payload) >= 2:
+            return replace(state, keep_warm_remaining=payload[0] | (payload[1] << 8))
+        return replace(state, keep_warm_remaining=payload[0])
     return state
 
 

@@ -25,7 +25,7 @@ custom_components/stagg_ekg_plus/
   entity.py          # StaggEntity base (device info, availability)
   climate.py         # target temp + heat/off; follows kettle F/C unit
   switch.py          # power
-  sensor.py          # current temp (None when off), target temp, lift countdown
+  sensor.py          # current temp (None when off), target temp, keep-warm countdown
   binary_sensor.py   # keep-warm (0x06), off-base (kettle lifted)
   strings.json, translations/en.json
 hacs.json
@@ -64,8 +64,10 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
 - `current_temp` byte `0x20` (32) is the OFF sentinel; the kettle only reports a
   real reading while powered on (entities report None when off).
 - State frame types: 0x00 power, 0x01 hold BUTTON, 0x02 target temp+unit,
-  0x03 current temp+unit, 0x04 lift countdown, 0x05 marker (ffffffff),
-  0x06 hold MODE (keep-warm), 0x07 reserved (000000), 0x08 base presence.
+  0x03 current temp+unit, 0x04 keep-warm countdown (16-bit LE seconds, sent as
+  [lo,hi] twice; starts at 3600 = 60 min and counts down to 0, then auto-off;
+  0 when not keeping warm), 0x05 marker (ffffffff), 0x06 hold MODE (keep-warm),
+  0x07 reserved (000000), 0x08 base presence.
   0x05 and 0x07 are verified constant across every EKG+ state (nothing to decode).
 - **0x08 is inverted vs intuition: byte `0x01` = ON BASE, `0x00` = lifted off
   base** (verified by physical lift test). `api.py` exposes `lifted = not byte`.
@@ -114,8 +116,9 @@ capture). See conversation history / git log for the exact test snippet.
   surfaced as the Keep warm binary sensor. `hold_button` (0x01) = the physical
   hold slider position alone (on=1/off=0, independent of heating) but it pulses
   when the element cycles right at setpoint, so it is decoded but NOT exposed.
-- `lift_countdown` (0x04) behavior during a real lift-off timeout is unverified
-  (stayed 0 during brief lifts).
+- `lift_countdown` (0x04) is actually the keep-warm auto-off timer: 16-bit
+  little-endian seconds from 3600 (60 min) to 0. Decoded live from HA debug logs;
+  surfaced as the Keep warm remaining duration sensor.
 - Not yet exercised inside a running HA instance.
 
 ## Credits
