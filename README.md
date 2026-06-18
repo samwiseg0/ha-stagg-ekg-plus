@@ -72,13 +72,13 @@ On demand is the default because it shares the Bluetooth adapter more politely. 
 
 Two details of the kettle's Bluetooth protocol that are easy to get wrong:
 
-### Auto-off timer (state frame `0x04`)
+### Hold timer (state frame `0x04`)
 
-This frame is the countdown, in seconds, until the kettle powers itself off. The
-value is a **16-bit little-endian** number - it's split across two bytes with the
-*small* part sent first - and the pair is sent twice for redundancy
-(e.g. `10 0e 10 0e`). Reassemble it as `low + (high * 256)`, so `10 0e` -> `0x0e10`
-= `3600` seconds = 60 minutes.
+This frame backs the **Hold timer** sensor: the countdown, in seconds, until the
+kettle powers itself off. The value is a **16-bit little-endian** number - it's
+split across two bytes with the *small* part sent first - and the pair is sent
+twice for redundancy (e.g. `10 0e 10 0e`). Reassemble it as `low + (high * 256)`,
+so `10 0e` -> `0x0e10` = `3600` seconds = 60 minutes.
 
 - With the **hold (keep-warm) slider on**, it starts at **3600** (60 min).
 - With hold **off** (the short post-boil warm), it starts at **300** (5 min).
@@ -88,7 +88,7 @@ value is a **16-bit little-endian** number - it's split across two bytes with th
 Reading only the first byte makes it look like a meaningless counter that rolls
 `255 -> 0` every 256 seconds; reading both bytes reveals the real timer.
 
-### "Holding" flag (state frame `0x06`)
+### "Holding temp" flag (state frame `0x06`)
 
 This is a clean on/off flag that is **true only when the kettle has reached the
 target and is actively maintaining temperature** (keep-warm), and **false while it
