@@ -18,5 +18,5 @@
   "issue_tracker": "https://github.com/samwiseg0/ha-stagg-ekg-plus/issues",
   "loggers": ["bleak", "bleak_retry_connector"],
   "requirements": ["bleak-retry-connector>=3.5.0"],
-  "version": "0.6.3"
+  "version": "0.6.4"
 }

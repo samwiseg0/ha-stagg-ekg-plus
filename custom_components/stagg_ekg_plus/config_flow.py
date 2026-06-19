@@ -149,20 +149,37 @@ class StaggConfigFlow(ConfigFlow, domain=DOMAIN):
 class StaggOptionsFlow(OptionsFlow):
     """Handle options for the Fellow Stagg EKG+ integration."""
 
+    def __init__(self) -> None:
+        self._connection_mode: str = DEFAULT_CONNECTION_MODE
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Let the user pick the connection mode."""
+        """Let the user pick the connection mode.
+
+        The background-poll option only applies to on-demand mode, so it is
+        asked in a second step that is skipped entirely for persistent mode
+        (Home Assistant forms cannot reactively hide a field based on another
+        field's value within a single step).
+        """
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            self._connection_mode = user_input[CONF_CONNECTION_MODE]
+            if self._connection_mode == CONNECTION_MODE_ON_DEMAND:
+                return await self.async_step_poll()
+            # Persistent: the poll is irrelevant. Carry forward any previously
+            # chosen interval so it returns if the user switches back later.
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_CONNECTION_MODE: self._connection_mode,
+                    CONF_POLL_INTERVAL: self.config_entry.options.get(
+                        CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
+                    ),
+                },
+            )
 
         current = self.config_entry.options.get(
             CONF_CONNECTION_MODE, DEFAULT_CONNECTION_MODE
-        )
-        current_poll = str(
-            self.config_entry.options.get(
-                CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
-            )
         )
         return self.async_show_form(
             step_id="init",
@@ -180,6 +197,32 @@ class StaggOptionsFlow(OptionsFlow):
                             mode=SelectSelectorMode.DROPDOWN,
                         )
                     ),
+                }
+            ),
+        )
+
+    async def async_step_poll(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """On-demand mode: pick the optional background poll interval."""
+        if user_input is not None:
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_CONNECTION_MODE: self._connection_mode,
+                    CONF_POLL_INTERVAL: user_input[CONF_POLL_INTERVAL],
+                },
+            )
+
+        current_poll = str(
+            self.config_entry.options.get(
+                CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
+            )
+        )
+        return self.async_show_form(
+            step_id="poll",
+            data_schema=vol.Schema(
+                {
                     vol.Required(
                         CONF_POLL_INTERVAL, default=current_poll
                     ): SelectSelector(

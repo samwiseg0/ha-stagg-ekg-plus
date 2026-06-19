@@ -21,14 +21,22 @@
     "step": {
       "init": {
         "title": "Fellow Stagg EKG+ options",
-        "description": "Choose how Home Assistant keeps in touch with the kettle over Bluetooth.",
+        "description": "How Home Assistant talks to the kettle over Bluetooth.",
         "data": {
-          "connection_mode": "Connection mode",
-          "poll_interval": "Background poll (on demand mode)"
+          "connection_mode": "Connection mode"
         },
         "data_description": {
-          "connection_mode": "Persistent keeps one connection open at all times for live updates and instant control. On demand connects only when you control the kettle from Home Assistant, stays connected while it is on, then disconnects a few seconds after it turns off to free the Bluetooth adapter. While disconnected, entities show the last known state and Home Assistant cannot detect a physical power-on (the kettle does not broadcast its state).",
-          "poll_interval": "On demand mode only. How often Home Assistant briefly reconnects while the kettle is off to check whether it was turned on at the kettle. A lower value notices a physical power-on sooner but uses the Bluetooth adapter more often. Off keeps the adapter free; a physical power-on is then only noticed the next time you control the kettle from Home Assistant."
+          "connection_mode": "Persistent stays connected for live updates. On demand connects only when you control the kettle, then disconnects shortly after it turns off; while disconnected it shows the last known state and can't see a power-on done at the kettle."
+        }
+      },
+      "poll": {
+        "title": "Background poll",
+        "description": "On demand only. Briefly reconnect on a schedule to catch a power-on done at the kettle.",
+        "data": {
+          "poll_interval": "Background poll"
+        },
+        "data_description": {
+          "poll_interval": "How often to check while the kettle is off. Lower notices a power-on sooner but uses the adapter more. Off keeps the adapter free."
         }
       }
     }
