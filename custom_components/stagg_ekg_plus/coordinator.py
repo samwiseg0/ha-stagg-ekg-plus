@@ -569,6 +569,12 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
 
     async def _ensure_command_connection(self) -> None:
         """Connect for a command, raising a clear error if unreachable."""
+        # A user command means this is no longer a passive background probe:
+        # clear the probe flag so a resulting power-on is not logged as a poll
+        # catch and the normal session/idle handling applies (this also covers
+        # a command that reuses a probe connection still being established).
+        self._probing = False
+        self._probe_started = None
         try:
             await self._ensure_connected()
         except Exception as err:  # noqa: BLE001 - boundary: surface as HA error
