@@ -1,23 +1,53 @@
 # Fellow Stagg EKG+ for Home Assistant
 
+[![GitHub Release](https://img.shields.io/github/release/samwiseg0/ha-stagg-ekg-plus.svg?style=flat-square)](https://github.com/samwiseg0/ha-stagg-ekg-plus/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/samwiseg0/ha-stagg-ekg-plus/validate.yml?branch=main&style=flat-square)](https://github.com/samwiseg0/ha-stagg-ekg-plus/actions/workflows/validate.yml)
+[![Test Coverage](https://img.shields.io/codecov/c/gh/samwiseg0/ha-stagg-ekg-plus?style=flat-square)](https://app.codecov.io/gh/samwiseg0/ha-stagg-ekg-plus/)
+[![License](https://img.shields.io/github/license/samwiseg0/ha-stagg-ekg-plus.svg?style=flat-square)](LICENSE)
+[![hacs](https://img.shields.io/badge/HACS-default-orange.svg?style=flat-square)](https://hacs.xyz)
+
 A native Home Assistant integration for the [Fellow Stagg EKG+](https://fellowproducts.com/products/stagg-ekg-plus) electric kettle. It talks to the kettle directly over Bluetooth LE using Home Assistant's built-in Bluetooth stack, so **no separate bridge, server, or Homebridge instance is required**.
 
 This is a from-scratch reimplementation of the protocol used by the
 [homebridge-stagg-ekg-plus](https://github.com/philscott-dev/homebridge-stagg-ekg-plus)
 project, built as a HACS-installable custom integration.
 
+## Contents
+
+- [Features](#features)
+- [Supported devices](#supported-devices)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Setup](#setup)
+- [Connection mode](#connection-mode)
+- [Entities](#entities)
+- [How data is updated](#how-data-is-updated)
+- [Known limitations](#known-limitations)
+- [Troubleshooting](#troubleshooting)
+- [Example automation](#example-automation)
+- [Removing the integration](#removing-the-integration)
+- [Protocol notes](#protocol-notes)
+- [Development](#development)
+- [AI disclosure](#ai-disclosure)
+- [Credits](#credits)
+- [License](#license)
+
 ## Features
 
-- **Climate** entity: set the target temperature and turn the kettle on/off.
-- **Switch**: power on/off.
-- **Sensors**: current temperature, target temperature, and a **Hold timer** (how long the kettle will keep going before it powers itself off: counts down from 60 minutes while keep-warm/hold is on, or 5 minutes after a boil without hold).
-- **Diagnostic sensor** (disabled by default): **Signal strength** (Bluetooth RSSI).
-- **Binary sensors**: **Holding temp** (on once the kettle has reached the target and is maintaining temperature; off while heating up) and **On base** (on when the kettle is seated on its base, off when lifted). An optional **Hold enabled** sensor (the physical hold slider position) is available but disabled by default.
+- **Climate, switch, sensors, and binary sensors** for the kettle - set the
+  target temperature, turn it on/off, and read current/target temperature, the
+  auto-off (hold) timer, holding status, and base presence. See [Entities](#entities).
 - Follows the kettle's Fahrenheit/Celsius setting automatically (104-212 F / 40-100 C).
-- Local push: state updates stream live over Bluetooth notifications, with automatic reconnect.
-- Selectable **connection mode**: connect on demand (default - stays connected while the kettle is on, frees the adapter once it is off), or keep a persistent connection for always-live updates. On demand can optionally **poll in the background** to catch a physical power-on.
+- **Local push:** state streams live over Bluetooth notifications, with automatic reconnect.
+- Selectable **connection mode** (on demand or persistent), with an optional
+  background poll to catch a physical power-on. See [Connection mode](#connection-mode).
 - Works with a local Bluetooth adapter **or** an [ESPHome Bluetooth proxy](https://esphome.io/components/bluetooth_proxy.html).
 - Automatic Bluetooth discovery.
+
+## Supported devices
+
+- **Fellow Stagg EKG+** (the Bluetooth model). It advertises as `FELLOW` followed by the last bytes of its address (for example `FELLOW46B9`).
+- **Not supported:** the **Fellow Stagg EKG Pro** (a different, WiFi-based kettle with its own protocol) and the original non-smart Stagg EKG.
 
 ## Requirements
 
@@ -47,37 +77,20 @@ The kettle is discovered automatically once it is powered and in range. You will
 1. Go to **Settings -> Devices & Services -> Add Integration**.
 2. Search for **Fellow Stagg EKG+** and select the discovered kettle.
 
-The kettle advertises as `FELLOW` followed by the last bytes of its address (for example `FELLOW46B9`).
-
-## Notes on behavior
-
-- The kettle reports temperatures in whatever unit it is set to on the device (Fahrenheit or Celsius). The integration follows that setting automatically, including if you flip the physical F/C switch while it is running. Valid ranges are 104-212 deg F / 40-100 deg C.
-- The current-temperature reading is only available while the kettle is actively measuring; when it is off **or lifted off its base**, the kettle reports a fixed sentinel value (32), so the integration reports it as unavailable.
-- **Holding temp** turns on once the kettle reaches the target and starts maintaining temperature (it is off during the initial heat-up). **Hold timer** shows ~60 minutes when the hold slider is on, or ~5 minutes for the post-boil keep-warm without hold.
-- Hold and unit (F/C) are physical controls on the kettle and cannot be changed over Bluetooth; they are read-only here.
-- Bluetooth LE allows only one active connection to the kettle at a time. If you previously ran the Homebridge `homebridge-stagg-ekg-plus-server` on a Pi, stop it so Home Assistant can connect.
-
 ## Connection mode
 
 Go to **Settings -> Devices & Services -> Fellow Stagg EKG+ -> Configure** to choose how Home Assistant talks to the kettle:
 
-- **On demand (default):** connects when you send a command and stays connected while the kettle is **powered on** (so the temperature streams live while it heats and holds). Once the kettle turns off it disconnects after a few seconds to free the Bluetooth adapter for other devices. While the kettle is off, entities show the last known state.
-- **Persistent:** holds one Bluetooth connection open at all times, so state updates stream live and commands take effect instantly. A keep-alive watchdog reconnects automatically if the link goes quiet.
+- **On demand (default):** connects when you send a command and stays connected while the kettle is **powered on**, so temperature streams live while it heats and holds. It disconnects a few seconds after the kettle turns off to free the Bluetooth adapter; entities then show the last known state.
+- **Persistent:** keeps one Bluetooth connection open at all times for always-live state and instant commands. A keep-alive watchdog reconnects automatically if the link goes quiet.
 
-On demand is the default because it shares the Bluetooth adapter more politely. Switch to persistent if you want always-live state or the fastest possible control while the kettle is off.
+On demand shares the adapter more politely and is the default; choose persistent for always-live state or the fastest control while the kettle is off.
 
 ### Background poll (on demand only)
 
-With on demand selected you can also set a **Background poll** interval (Off by default, or every 1 / 2 / 5 minutes). When enabled, Home Assistant briefly reconnects on that schedule while the kettle is off, reads its state, and disconnects again within a few seconds if it is still off. If it finds the kettle has been switched on, it keeps the connection and streams live state as usual.
+On demand cannot tell when the kettle is switched on **physically** (using the dial on the kettle), because the kettle does not broadcast its state - while disconnected, Home Assistant has no way to know. The background poll closes that gap: at the interval you choose (Off by default, or every 1 / 2 / 5 minutes) Home Assistant briefly reconnects while the kettle is off, checks its state, and disconnects again unless it finds the kettle on - in which case it keeps the connection and streams live.
 
-This is the way to have a **physical power-on** (using the dial on the kettle) reflected in Home Assistant without holding a connection open all the time like persistent mode. A lower interval notices the change sooner but uses the Bluetooth adapter more often. Off keeps the adapter completely free, at the cost of not seeing a physical power-on until you next control the kettle from Home Assistant. The setting has no effect in persistent mode (already always connected).
-
-> **Note:** In on-demand mode with the background poll set to **Off**, Home Assistant cannot tell when the kettle is turned on **physically** (using the dial on the kettle itself). The kettle does not broadcast its state in its Bluetooth advertisement, so while disconnected there is no way to know it was switched on - the entities only update once you next control it from Home Assistant. Enable the background poll, or use **persistent** mode, if you want physical power-ons reflected automatically.
-
-## Supported devices
-
-- **Fellow Stagg EKG+** (the Bluetooth model). It advertises as `FELLOW` followed by the last bytes of its address (for example `FELLOW46B9`).
-- **Not supported:** the **Fellow Stagg EKG Pro** (a different, WiFi-based kettle with its own protocol) and the original non-smart Stagg EKG.
+A shorter interval notices a physical power-on sooner but uses the adapter more often; **Off** keeps the adapter free but means physical power-ons are not reflected until you next control the kettle from Home Assistant. The setting has no effect in persistent mode (already always connected).
 
 ## Entities
 
@@ -113,7 +126,7 @@ reconnects to learn whether the kettle has been switched on.
 - **Current temperature is unavailable when the kettle is off or lifted** off its
   base - the kettle only reports a real reading while actively measuring.
 - **On-demand mode without the background poll cannot detect a physical
-  power-on** (see the Connection mode note above).
+  power-on** (see Connection mode above).
 
 ## Troubleshooting
 

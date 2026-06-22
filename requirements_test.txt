@@ -9,6 +9,7 @@
 # dependencies, this list may need updating.
 pytest
 pytest-homeassistant-custom-component
+pytest-cov
 mypy
 bleak
 bleak-retry-connector
