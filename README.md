@@ -4,7 +4,7 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/samwiseg0/ha-stagg-ekg-plus/validate.yml?branch=main&style=flat-square)](https://github.com/samwiseg0/ha-stagg-ekg-plus/actions/workflows/validate.yml)
 [![Test Coverage](https://img.shields.io/codecov/c/gh/samwiseg0/ha-stagg-ekg-plus?style=flat-square)](https://app.codecov.io/gh/samwiseg0/ha-stagg-ekg-plus/)
 [![License](https://img.shields.io/github/license/samwiseg0/ha-stagg-ekg-plus.svg?style=flat-square)](LICENSE)
-[![hacs](https://img.shields.io/badge/HACS-default-orange.svg?style=flat-square)](https://hacs.xyz)
+[![hacs](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://hacs.xyz/docs/faq/custom_repositories)
 
 A native Home Assistant integration for the [Fellow Stagg EKG+](https://fellowproducts.com/products/stagg-ekg-plus) electric kettle. It talks to the kettle directly over Bluetooth LE using Home Assistant's built-in Bluetooth stack, so **no separate bridge, server, or Homebridge instance is required**.
 
