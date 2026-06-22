@@ -80,8 +80,13 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     def __init__(
         self, hass: HomeAssistant, entry: ConfigEntry, address: str
     ) -> None:
-        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=None)
-        self.entry = entry
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_interval=None,
+            config_entry=entry,
+        )
         self.address = address
         self._client = StaggClient(on_state=self._handle_state)
         self._connect_lock = asyncio.Lock()
@@ -167,7 +172,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
 
     async def async_start(self) -> None:
         """Register for advertisements and open the initial connection."""
-        self.entry.async_on_unload(
+        self.config_entry.async_on_unload(
             bluetooth.async_register_callback(
                 self.hass,
                 self._on_bluetooth_event,
@@ -175,10 +180,10 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 BluetoothScanningMode.ACTIVE,
             )
         )
-        self.entry.async_on_unload(self._cancel_pending_reconnect)
-        self.entry.async_on_unload(self._cancel_keepalive_timer)
-        self.entry.async_on_unload(self._cancel_idle_disconnect_timer)
-        self.entry.async_on_unload(self._cancel_poll_timer)
+        self.config_entry.async_on_unload(self._cancel_pending_reconnect)
+        self.config_entry.async_on_unload(self._cancel_keepalive_timer)
+        self.config_entry.async_on_unload(self._cancel_idle_disconnect_timer)
+        self.config_entry.async_on_unload(self._cancel_poll_timer)
         await self._ensure_connected()
         if not self._client.is_connected and not self._on_demand:
             # Not reachable yet; keep retrying in the background. In on-demand
@@ -214,7 +219,9 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         # A fresh advertisement is the best moment to (re)connect.
         self._cancel_pending_reconnect()
         self._reconnect_attempt = 0
-        self.hass.async_create_task(self._async_reconnect())
+        self.config_entry.async_create_background_task(
+            self.hass, self._async_reconnect(), name=f"{DOMAIN}_reconnect"
+        )
 
     @callback
     def _on_disconnect(self, _client: BleakClientWithServiceCache) -> None:
@@ -311,7 +318,9 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         )
         # Drop the stale link; _on_disconnect then schedules the reconnect.
         self._stale_disconnect = True
-        self.hass.async_create_task(self._async_disconnect())
+        self.config_entry.async_create_background_task(
+            self.hass, self._async_disconnect(), name=f"{DOMAIN}_disconnect"
+        )
 
     @callback
     def _schedule_idle_disconnect(
@@ -350,7 +359,9 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         ):
             return
         _LOGGER.debug("Idle disconnect from kettle %s", self.address)
-        self.hass.async_create_task(self._async_disconnect())
+        self.config_entry.async_create_background_task(
+            self.hass, self._async_disconnect(), name=f"{DOMAIN}_disconnect"
+        )
 
     async def _async_disconnect(self) -> None:
         """Disconnect the client, suppressing benign teardown errors.
@@ -386,7 +397,9 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             or not self._wants_connection()
         ):
             return
-        self.hass.async_create_task(self._async_reconnect())
+        self.config_entry.async_create_background_task(
+            self.hass, self._async_reconnect(), name=f"{DOMAIN}_reconnect"
+        )
 
     @callback
     def _cancel_pending_reconnect(self) -> None:
@@ -434,7 +447,9 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             # fall back to the idle/disconnected state.
             self._schedule_poll()
             return
-        self.hass.async_create_task(self._async_probe())
+        self.config_entry.async_create_background_task(
+            self.hass, self._async_probe(), name=f"{DOMAIN}_poll"
+        )
 
     async def _async_probe(self) -> None:
         """Briefly connect to read state, then disconnect if still off.
