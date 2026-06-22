@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.components.climate.const import HVACAction, HVACMode
 from homeassistant.const import (
@@ -56,6 +56,15 @@ def test_switch_is_on(hass: HomeAssistant) -> None:
 def test_switch_is_on_none_without_data(hass: HomeAssistant) -> None:
     coord = _coordinator(hass, None)
     assert StaggPowerSwitch(coord).is_on is None
+
+
+def test_switch_assumed_state_tracks_connection(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(power=True))
+    switch = StaggPowerSwitch(coord)
+    coord._client = MagicMock(is_connected=False)
+    assert switch.assumed_state is True  # disconnected -> last-known, maybe stale
+    coord._client = MagicMock(is_connected=True)
+    assert switch.assumed_state is False  # live connection -> real state
 
 
 async def test_switch_turn_on_off(hass: HomeAssistant) -> None:

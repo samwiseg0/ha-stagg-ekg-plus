@@ -54,6 +54,13 @@ class StaggPowerSwitch(StaggEntity, SwitchEntity):
         data = self.coordinator.data
         return data.power if data else None
 
+    @property
+    def assumed_state(self) -> bool:
+        # While disconnected (on-demand idle), the shown power is the last known
+        # value and may be stale if the kettle was toggled physically, so mark
+        # it as assumed. A live connection reflects real state.
+        return not self.coordinator.is_connected
+
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self.coordinator.async_set_power(True)
 
