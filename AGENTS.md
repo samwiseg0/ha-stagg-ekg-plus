@@ -100,6 +100,21 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
 
 - GATT service `00001820-0000-1000-8000-00805f9b34fb`,
   characteristic `00002a80-...` (write + notify).
+- Protocol lineage: shares the Acaia / pyacaia BLE family (the old-style Acaia
+  scales use this same char `00002a80` and the same `0xefdd` header; see
+  `zweckj/aioacaia`). The Stagg uses a SIMPLIFIED variant: state frames are just
+  `efdd <type> <payload>` with NO length byte and NO trailing checksum (Acaia's
+  canonical `efdd cmd length payload ck1 ck2` does not apply here). VERIFIED by
+  live capture 2026-06-22 (tools/probe.py): each frame arrives as two
+  notifications -- a 3-byte header `efdd<type>` then the payload. Payloads are
+  tiny (3-4 bytes), values often sent twice. Decoded table: 00 power `010100`;
+  01 hold-button `010100`; 02 target `d001d001` (208F,unit); 03 current
+  `53015301` (83F,unit); 04 auto-off `00000000` (16-bit LE x2); 05 marker
+  `ffffffff`; 06 hold-mode `000000`; 07 reserved `000000`; 08 base `010100`
+  (01=on base) plus the oversized auth echo `09640202...` (ignored). So
+  separator-split `parse_frames` is correct; do NOT add length-aware parsing
+  (it would read a data byte as a length). False-separator risk ~0: every value
+  is range-bounded below 0xef (temps cap 0xd4, auto-off max 0x0e10).
 - Advertised name: `FELLOW` + last 2 MAC bytes (e.g. `FELLOW46B9`).
 - On connect, send the fixed auth frame `INIT_SEQUENCE` before commands work.
 - All frames (rx and tx) start with separator `0xefdd`. Notifications arrive
@@ -181,4 +196,6 @@ capture). See conversation history / git log for the exact test snippet.
 ## Credits
 
 Protocol reverse engineering: philscott-dev (homebridge-stagg-ekg-plus-server)
-and tlyakhov (fellow-stagg-ekg-plus).
+and tlyakhov (fellow-stagg-ekg-plus). Underlying BLE protocol family: Acaia /
+pyacaia (see zweckj/aioacaia) -- the Stagg reuses the same characteristic and
+`0xefdd` header with a simplified frame layout.
