@@ -108,6 +108,14 @@ async def test_climate_set_temperature(hass: HomeAssistant) -> None:
     set_temp.assert_awaited_once_with(205)
 
 
+async def test_climate_set_temperature_truncates_float(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(power=True, fahrenheit=True))
+    climate = StaggClimate(coord)
+    with patch.object(coord, "async_set_target_temp", AsyncMock()) as set_temp:
+        await climate.async_set_temperature(**{ATTR_TEMPERATURE: 199.8})
+    set_temp.assert_awaited_once_with(199)
+
+
 async def test_climate_set_temperature_noop_without_value(hass: HomeAssistant) -> None:
     coord = _coordinator(hass, KettleState(power=True))
     climate = StaggClimate(coord)

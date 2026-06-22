@@ -273,6 +273,19 @@ def test_handle_notify_buffer_is_bounded_on_garbage():
     assert len(client._buffer) <= api._MAX_BUFFER
 
 
+def test_handle_notify_trims_to_last_separator():
+    client = api.StaggClient()
+    # An oversized buffer that does contain a separator (but not two complete
+    # frames) is trimmed back to that separator rather than fully cleared, so a
+    # partial frame straddling notifications survives.
+    data = bytearray(b"\x11" * (api._MAX_BUFFER + 50))
+    data += bytearray(api.FRAME_SEPARATOR)
+    data += b"\x22" * 4
+    client._handle_notify(None, data)
+    assert bytes(client._buffer).startswith(bytes(api.FRAME_SEPARATOR))
+    assert len(client._buffer) <= api._MAX_BUFFER
+
+
 def test_kettlestate_is_frozen():
     state = api.KettleState()
     with pytest.raises(Exception):
@@ -286,6 +299,20 @@ async def test_client_connect_requires_device():
     client = api.StaggClient()
     with pytest.raises(RuntimeError):
         await client.connect()
+
+
+async def test_client_connect_uses_bleak_client():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    fake = AsyncMock()
+    fake.is_connected = True
+    client = api.StaggClient(device="AA:BB:CC:DD:EE:FF")
+    with patch.object(api, "BleakClient", MagicMock(return_value=fake)):
+        await client.connect()
+    fake.connect.assert_awaited_once()
+    fake.start_notify.assert_awaited_once()  # start() ran on the new client
+    assert client.is_connected
+
 
 
 async def test_client_start_subscribes_and_authenticates():

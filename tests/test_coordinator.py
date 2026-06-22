@@ -624,3 +624,44 @@ async def test_command_raises_when_connect_fails(hass: HomeAssistant) -> None:
     assert exc.value.translation_key == "not_reachable"
 
 
+def test_schedule_reconnect_backoff_escalates_and_caps(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    delays: list[float] = []
+
+    def _capture(_hass: HomeAssistant, delay: float, _cb: object) -> MagicMock:
+        delays.append(delay)
+        return MagicMock()
+
+    with patch(f"{_CO}.async_call_later", side_effect=_capture):
+        for _ in range(7):
+            coord._cancel_reconnect = None  # simulate the previous timer firing
+            coord._schedule_reconnect()
+    # 5, 10, 20, 30, 60 then held at the 60s cap.
+    assert delays == [5, 10, 20, 30, 60, 60, 60]
+
+
+def test_keepalive_watchdog_to_reconnect_chain(hass: HomeAssistant) -> None:
+    """The watchdog marks the link stale, drops it, and the drop reconnects."""
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    coord._client = MagicMock(is_connected=True)
+    coord._connected_since = 1.0
+
+    with (
+        patch.object(coord, "_async_disconnect", MagicMock(return_value=None)),
+        patch.object(coord.config_entry, "async_create_background_task") as task,
+    ):
+        coord._keepalive_timer_fired(_now())
+    assert coord._stale_disconnect is True
+    task.assert_called_once()
+
+    # The disconnect callback that follows routes to a reconnect and clears the
+    # stale flag.
+    with patch.object(coord, "_schedule_reconnect") as reconnect:
+        coord._on_disconnect(MagicMock())
+    reconnect.assert_called_once()
+    assert coord._stale_disconnect is False
+
+
+

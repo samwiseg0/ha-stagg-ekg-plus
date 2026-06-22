@@ -115,6 +115,22 @@ async def test_user_step_creates_entry(hass: HomeAssistant) -> None:
     assert result2["data"] == {CONF_ADDRESS: ADDRESS}
 
 
+async def test_user_step_skips_already_configured(hass: HomeAssistant) -> None:
+    """A discovered kettle that is already set up is skipped in the user step."""
+    MockConfigEntry(
+        domain=DOMAIN, unique_id=ADDRESS, data={CONF_ADDRESS: ADDRESS}
+    ).add_to_hass(hass)
+    with patch(
+        "custom_components.stagg_ekg_plus.config_flow.async_discovered_service_info",
+        return_value=[_service_info()],
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_devices_found"
+
+
 async def test_options_flow_persistent_skips_poll_step(hass: HomeAssistant) -> None:
     """Choosing persistent finishes in one step (no poll question)."""
     entry = MockConfigEntry(
