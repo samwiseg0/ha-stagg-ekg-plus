@@ -1,0 +1,23 @@
+# Test dependencies for the Fellow Stagg EKG+ integration.
+#
+# The pure protocol codec tests (tests/test_api.py) only need pytest + bleak.
+# The Home Assistant-dependent tests (tests/test_config_flow.py) pull in
+# Home Assistant via pytest-homeassistant-custom-component, plus the third-party
+# requirements of the `bluetooth` and `usb` components that our integration
+# transitively loads (these are not installed automatically by the test
+# harness). If a future Home Assistant version changes those component
+# dependencies, this list may need updating.
+pytest
+pytest-homeassistant-custom-component
+bleak
+bleak-retry-connector
+habluetooth
+bluetooth-adapters
+bluetooth-auto-recovery
+bluetooth-data-tools
+aiousbwatcher
+usb-devices
+serialx
+pyserial
+pyudev
+aioesphomeapi

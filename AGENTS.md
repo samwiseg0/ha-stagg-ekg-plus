@@ -148,10 +148,18 @@ syntax + the pure protocol logic.
 
 ```bash
 # one-time
-python3 -m venv .venv && .venv/bin/pip install bleak
+python3 -m venv .venv && .venv/bin/pip install bleak pytest
 
 # syntax check everything
 .venv/bin/python -m py_compile custom_components/stagg_ekg_plus/*.py tools/*.py
+
+# unit tests (pure protocol codec; no Home Assistant needed)
+.venv/bin/python -m pytest tests/test_api.py -q
+
+# full suite incl. HA config/options flow tests (heavier; pulls in HA + the
+# bluetooth/usb component deps via pytest-homeassistant-custom-component)
+.venv/bin/pip install -r requirements_test.txt
+.venv/bin/python -m pytest tests/ -q
 
 # find the kettle (Linux shows MAC; macOS shows a per-host UUID)
 .venv/bin/python tools/scan.py
@@ -160,9 +168,14 @@ python3 -m venv .venv && .venv/bin/pip install bleak
 .venv/bin/python tools/probe.py --duration 25
 ```
 
-When changing `api.py`, re-run the parse/command assertions (build_*_command
-must reproduce captured frames; parse_frames+apply_frame must decode a real
-capture). See conversation history / git log for the exact test snippet.
+When changing `api.py`, run `tests/test_api.py` (build_*_command must reproduce
+captured frames; parse_frames+apply_frame must decode a real capture). The codec
+tests load `api.py` standalone by path, so they run without Home Assistant.
+`tests/test_config_flow.py` covers the config + options flows via
+pytest-homeassistant-custom-component; `tests/conftest.py` stubs the bluetooth
+manager's D-Bus system-history load so the `bluetooth` dependency sets up in CI/
+on macOS. CI runs everything via `.github/workflows/validate.yml` (the `tests`
+job installs `requirements_test.txt`).
 
 ## Conventions
 
