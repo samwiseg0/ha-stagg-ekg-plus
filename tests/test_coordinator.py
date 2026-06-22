@@ -255,6 +255,41 @@ async def test_ensure_connected_no_device(hass: HomeAssistant) -> None:
     assert coord._connected_since is None
 
 
+async def test_ensure_connected_refreshes_device_on_retry(
+    hass: HomeAssistant,
+) -> None:
+    """establish_connection gets a callback that re-resolves the device.
+
+    bleak_retry_connector retries internally; the callback hands it the freshest
+    BLEDevice each attempt and falls back to the initial one if HA has none.
+    """
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    initial = object()
+    fresh = object()
+    captured: dict[str, object] = {}
+
+    async def _establish(*_args: object, **kwargs: object) -> MagicMock:
+        captured.update(kwargs)
+        return MagicMock()
+
+    with (
+        # 1st call (top of _ensure_connected) -> initial; then the callback
+        # returns a fresher device, then None (HA lost the record).
+        patch.object(
+            coord, "_get_ble_device", side_effect=[initial, fresh, None]
+        ),
+        patch(f"{_CO}.establish_connection", _establish),
+        patch.object(coord._client, "start", AsyncMock()),
+        patch.object(coord, "_reset_keepalive"),
+    ):
+        await coord._ensure_connected()
+        callback = captured["ble_device_callback"]
+        assert callable(callback)
+        assert callback() is fresh  # freshest device on a retry
+        assert callback() is initial  # falls back when HA has none
+
+
+
 async def test_ensure_connected_reload_race(hass: HomeAssistant) -> None:
     coord = _coordinator(hass)
     fake_client = AsyncMock()

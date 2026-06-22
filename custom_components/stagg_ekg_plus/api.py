@@ -46,6 +46,7 @@ from dataclasses import dataclass, replace
 
 from bleak import BleakClient
 from bleak.backends.device import BLEDevice
+from bleak.exc import BleakDBusError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,6 +71,16 @@ _MAX_BUFFER = 512
 # window the coordinator holds its connect lock, so a wedged BLE stack cannot
 # hang setup indefinitely.
 _START_TIMEOUT = 15.0
+
+# Transient BlueZ write errors worth retrying: the adapter is momentarily busy
+# (another operation in flight) rather than truly failed. Retrying after a short
+# pause usually succeeds. Any other D-Bus error is surfaced immediately.
+_WRITE_RETRY_DBUS_ERRORS = (
+    "org.bluez.Error.Failed",
+    "org.bluez.Error.InProgress",
+)
+# Backoff (seconds) between write retries; its length caps the retry count.
+_WRITE_RETRY_BACKOFF = (0.0, 0.25, 0.5, 1.0)
 
 # Command bytes.
 CMD = 0x0A
@@ -221,6 +232,7 @@ class StaggClient:
         self._client: BleakClient | None = None
         self._buffer = bytearray()
         self._seq = 0
+        self._write_lock = asyncio.Lock()
         self.state = KettleState()
 
     @property
@@ -281,7 +293,28 @@ class StaggClient:
     async def _write(self, data: bytes) -> None:
         if self._client is None:
             raise RuntimeError("Not connected")
-        await self._client.write_gatt_char(CHAR_UUID, data, response=False)
+        client = self._client
+        # Serialize writes: the switch and climate are separate HA platforms, so
+        # PARALLEL_UPDATES does not stop their commands from overlapping on the
+        # single characteristic. The lock also keeps retries from interleaving
+        # with another command.
+        async with self._write_lock:
+            for attempt, delay in enumerate(_WRITE_RETRY_BACKOFF):
+                try:
+                    await client.write_gatt_char(CHAR_UUID, data, response=False)
+                    return
+                except BleakDBusError as err:
+                    if (
+                        err.dbus_error not in _WRITE_RETRY_DBUS_ERRORS
+                        or attempt == len(_WRITE_RETRY_BACKOFF) - 1
+                    ):
+                        raise
+                    _LOGGER.debug(
+                        "Transient BLE write error (%s); retrying in %.2fs",
+                        err.dbus_error,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
 
     def _handle_notify(self, _sender: object, data: bytearray) -> None:
         # Raw frames are logged at debug level so the protocol can be inspected

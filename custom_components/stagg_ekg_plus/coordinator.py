@@ -538,6 +538,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 ble_device,
                 self.address,
                 disconnected_callback=self._on_disconnect,
+                ble_device_callback=lambda: self._get_ble_device() or ble_device,
             )
             if self._stopping:
                 # The entry was unloaded/reloaded while this connect was in

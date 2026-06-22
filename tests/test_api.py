@@ -22,6 +22,7 @@ tested with plain pytest -- no Home Assistant install required.
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -361,6 +362,72 @@ async def test_client_write_requires_connection():
     client = api.StaggClient()
     with pytest.raises(RuntimeError):
         await client.set_power(True)
+
+
+async def test_client_write_serializes_concurrent_commands():
+    """The write lock prevents switch and climate commands from interleaving."""
+    from unittest.mock import AsyncMock
+
+    client = api.StaggClient()
+    client._client = AsyncMock(is_connected=True)
+    phases: list[str] = []
+
+    async def _slow_write(_uuid, _data, response=False):
+        phases.append("start")
+        await asyncio.sleep(0)  # yield: an unlocked write would interleave here
+        phases.append("end")
+
+    client._client.write_gatt_char.side_effect = _slow_write
+    await asyncio.gather(client.set_power(True), client.set_target_temp(200))
+    # Serialized: each start is immediately followed by its own end.
+    assert phases == ["start", "end", "start", "end"]
+
+
+async def test_client_write_retries_transient_dbus_error():
+    from unittest.mock import AsyncMock
+
+    from bleak.exc import BleakDBusError
+
+    client = api.StaggClient()
+    client._client = AsyncMock(is_connected=True)
+    client._client.write_gatt_char.side_effect = [
+        BleakDBusError("org.bluez.Error.InProgress", []),
+        None,  # succeeds on the second attempt (first backoff is 0.0s)
+    ]
+    await client.set_power(True)
+    assert client._client.write_gatt_char.await_count == 2
+
+
+async def test_client_write_raises_on_non_retryable_dbus_error():
+    from unittest.mock import AsyncMock
+
+    from bleak.exc import BleakDBusError
+
+    client = api.StaggClient()
+    client._client = AsyncMock(is_connected=True)
+    client._client.write_gatt_char.side_effect = BleakDBusError(
+        "org.bluez.Error.NotConnected", []
+    )
+    with pytest.raises(BleakDBusError):
+        await client.set_power(True)
+    client._client.write_gatt_char.assert_awaited_once()
+
+
+async def test_client_write_retry_exhausted_raises():
+    from unittest.mock import AsyncMock, patch
+
+    from bleak.exc import BleakDBusError
+
+    client = api.StaggClient()
+    client._client = AsyncMock(is_connected=True)
+    client._client.write_gatt_char.side_effect = BleakDBusError(
+        "org.bluez.Error.Failed", []
+    )
+    with patch.object(api.asyncio, "sleep", AsyncMock()):
+        with pytest.raises(BleakDBusError):
+            await client.set_power(True)
+    # One attempt per backoff entry, then it gives up.
+    assert client._client.write_gatt_char.await_count == len(api._WRITE_RETRY_BACKOFF)
 
 
 async def test_client_disconnect_clears_client():
