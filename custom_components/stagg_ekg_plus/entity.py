@@ -38,6 +38,7 @@ class StaggEntity(CoordinatorEntity[StaggCoordinator]):
             manufacturer=MANUFACTURER,
             model=MODEL,
             name=MODEL,
+            suggested_area="Kitchen",
         )
 
     @property

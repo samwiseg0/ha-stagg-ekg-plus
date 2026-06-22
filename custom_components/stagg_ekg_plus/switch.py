@@ -27,6 +27,9 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from . import StaggConfigEntry
 from .entity import StaggEntity
 
+# Commands write to a single shared BLE connection; serialize them.
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

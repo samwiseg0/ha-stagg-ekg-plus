@@ -1,0 +1,25 @@
+{
+  "entity": {
+    "switch": {
+      "power": {
+        "default": "mdi:kettle-steam"
+      }
+    },
+    "sensor": {
+      "countdown": {
+        "default": "mdi:timer-outline"
+      }
+    },
+    "binary_sensor": {
+      "hold": {
+        "default": "mdi:thermometer-check"
+      },
+      "hold_enabled": {
+        "default": "mdi:toggle-switch"
+      },
+      "on_base": {
+        "default": "mdi:kettle"
+      }
+    }
+  }
+}

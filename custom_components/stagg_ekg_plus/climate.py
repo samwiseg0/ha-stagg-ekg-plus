@@ -34,6 +34,9 @@ from . import StaggConfigEntry
 from .api import TEMP_MAX_C, TEMP_MAX_F, TEMP_MIN_C, TEMP_MIN_F
 from .entity import StaggEntity
 
+# Commands write to a single shared BLE connection; serialize them.
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

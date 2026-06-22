@@ -41,6 +41,9 @@ from . import StaggConfigEntry
 from .api import KettleState
 from .entity import StaggEntity
 
+# Read-only push entities; no command serialization needed.
+PARALLEL_UPDATES = 0
+
 
 @dataclass(frozen=True, kw_only=True)
 class StaggSensorDescription(SensorEntityDescription):
