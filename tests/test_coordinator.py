@@ -501,3 +501,126 @@ async def test_async_disconnect_suppresses_errors(hass: HomeAssistant) -> None:
     coord._client.disconnect.side_effect = RuntimeError("boom")
     await coord._async_disconnect()  # must not raise
 
+
+async def test_async_start_persistent_schedules_reconnect(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    coord._client = MagicMock(is_connected=False)
+    with (
+        patch(f"{_BT}.async_register_callback", return_value=MagicMock()),
+        patch.object(coord, "_ensure_connected", AsyncMock()),
+        patch.object(coord, "_schedule_reconnect") as reconnect,
+    ):
+        await coord.async_start()
+    reconnect.assert_called_once()
+
+
+def test_on_bluetooth_event_noop_when_connected(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    coord._client = MagicMock(is_connected=True)
+    with patch.object(coord.config_entry, "async_create_background_task") as task:
+        coord._on_bluetooth_event(MagicMock(), MagicMock())
+    task.assert_not_called()
+
+
+def test_on_disconnect_noop_when_stopping_after_session(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    coord._connected_since = 1.0
+    coord._stopping = True
+    with patch.object(coord, "_schedule_reconnect") as reconnect:
+        coord._on_disconnect(MagicMock())
+    reconnect.assert_not_called()
+
+
+def test_on_disconnect_intentional_when_off_not_probe(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND)
+    coord._connected_since = 1.0
+    coord._probing = False
+    with (
+        patch.object(coord, "_schedule_poll") as poll,
+        patch.object(coord, "_schedule_reconnect") as reconnect,
+    ):
+        coord._on_disconnect(MagicMock())
+    poll.assert_called_once()
+    reconnect.assert_not_called()
+
+
+def test_schedule_idle_disconnect_noop_when_persistent(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    with patch(f"{_CO}.async_call_later") as later:
+        coord._schedule_idle_disconnect()
+    later.assert_not_called()
+
+
+def test_schedule_idle_disconnect_reset_rearms(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND)
+    old = MagicMock()
+    coord._cancel_idle_disconnect = old
+    with patch(f"{_CO}.async_call_later", return_value=MagicMock()) as later:
+        coord._schedule_idle_disconnect(reset=True)
+    old.assert_called_once()
+    later.assert_called_once()
+
+
+def test_schedule_idle_disconnect_no_reset_keeps_existing(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND)
+    old = MagicMock()
+    coord._cancel_idle_disconnect = old
+    with patch(f"{_CO}.async_call_later", return_value=MagicMock()) as later:
+        coord._schedule_idle_disconnect(reset=False)
+    old.assert_not_called()
+    later.assert_not_called()
+    assert coord._cancel_idle_disconnect is old
+
+
+def test_schedule_reconnect_noop_when_pending(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    coord._cancel_reconnect = MagicMock()
+    with patch(f"{_CO}.async_call_later") as later:
+        coord._schedule_reconnect()
+    later.assert_not_called()
+
+
+async def test_async_probe_connect_failure_reschedules(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND, poll="120")
+    coord._client = MagicMock(is_connected=False)
+    with (
+        patch.object(
+            coord, "_ensure_connected", AsyncMock(side_effect=RuntimeError("nope"))
+        ),
+        patch.object(coord, "_schedule_poll") as poll,
+    ):
+        await coord._async_probe()
+    assert coord._probing is False
+    poll.assert_called_once()
+
+
+async def test_ensure_connected_noop_when_connected(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    coord._client = MagicMock(is_connected=True)
+    with patch.object(coord, "_get_ble_device") as get_dev:
+        await coord._ensure_connected()
+    get_dev.assert_not_called()
+
+
+async def test_command_raises_when_connect_fails(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND)
+    with patch.object(
+        coord, "_ensure_connected", AsyncMock(side_effect=RuntimeError("x"))
+    ):
+        with pytest.raises(HomeAssistantError) as exc:
+            await coord._ensure_command_connection()
+    assert exc.value.translation_key == "not_reachable"
+
+
