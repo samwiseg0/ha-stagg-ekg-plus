@@ -30,6 +30,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import StaggConfigEntry
 from .api import KettleState
+from .coordinator import StaggCoordinator
 from .entity import StaggEntity
 
 # Read-only push entities; no command serialization needed.
@@ -80,7 +81,7 @@ class StaggBinarySensor(StaggEntity, BinarySensorEntity):
 
     entity_description: StaggBinaryDescription
 
-    def __init__(self, coordinator, description: StaggBinaryDescription) -> None:
+    def __init__(self, coordinator: StaggCoordinator, description: StaggBinaryDescription) -> None:
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.address}_{description.key}"

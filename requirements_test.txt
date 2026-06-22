@@ -9,6 +9,7 @@
 # dependencies, this list may need updating.
 pytest
 pytest-homeassistant-custom-component
+mypy
 bleak
 bleak-retry-connector
 habluetooth

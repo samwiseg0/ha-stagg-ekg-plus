@@ -41,6 +41,11 @@
       }
     }
   },
+  "exceptions": {
+    "not_reachable": {
+      "message": "Kettle {address} is not reachable over Bluetooth."
+    }
+  },
   "selector": {
     "connection_mode": {
       "options": {

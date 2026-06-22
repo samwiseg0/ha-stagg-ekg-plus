@@ -277,3 +277,70 @@ def test_kettlestate_is_frozen():
     state = api.KettleState()
     with pytest.raises(Exception):
         state.power = True  # type: ignore[misc]
+
+
+# --- StaggClient connection wrapper -----------------------------------------
+
+
+async def test_client_connect_requires_device():
+    client = api.StaggClient()
+    with pytest.raises(RuntimeError):
+        await client.connect()
+
+
+async def test_client_start_subscribes_and_authenticates():
+    from unittest.mock import AsyncMock
+
+    client = api.StaggClient()
+    fake = AsyncMock()
+    fake.is_connected = True
+    await client.start(fake)
+    fake.start_notify.assert_awaited_once()
+    fake.write_gatt_char.assert_awaited()  # the auth/init write
+    assert client.is_connected
+
+
+async def test_client_start_cleans_up_on_failure():
+    from unittest.mock import AsyncMock
+
+    client = api.StaggClient()
+    fake = AsyncMock()
+    fake.start_notify.side_effect = RuntimeError("boom")
+    with pytest.raises(RuntimeError):
+        await client.start(fake)
+    assert client._client is None
+    fake.disconnect.assert_awaited_once()
+
+
+async def test_client_set_power_writes_command():
+    from unittest.mock import AsyncMock
+
+    client = api.StaggClient()
+    client._client = AsyncMock()
+    await client.set_power(True)
+    client._client.write_gatt_char.assert_awaited()
+
+
+async def test_client_set_target_temp_writes_command():
+    from unittest.mock import AsyncMock
+
+    client = api.StaggClient()
+    client._client = AsyncMock()
+    await client.set_target_temp(205)
+    client._client.write_gatt_char.assert_awaited()
+
+
+async def test_client_write_requires_connection():
+    client = api.StaggClient()
+    with pytest.raises(RuntimeError):
+        await client.set_power(True)
+
+
+async def test_client_disconnect_clears_client():
+    from unittest.mock import AsyncMock
+
+    client = api.StaggClient()
+    client._client = AsyncMock()
+    await client.disconnect()
+    assert client._client is None
+

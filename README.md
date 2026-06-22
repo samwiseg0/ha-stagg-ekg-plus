@@ -74,6 +74,84 @@ This is the way to have a **physical power-on** (using the dial on the kettle) r
 
 > **Note:** In on-demand mode with the background poll set to **Off**, Home Assistant cannot tell when the kettle is turned on **physically** (using the dial on the kettle itself). The kettle does not broadcast its state in its Bluetooth advertisement, so while disconnected there is no way to know it was switched on - the entities only update once you next control it from Home Assistant. Enable the background poll, or use **persistent** mode, if you want physical power-ons reflected automatically.
 
+## Supported devices
+
+- **Fellow Stagg EKG+** (the Bluetooth model). It advertises as `FELLOW` followed by the last bytes of its address (for example `FELLOW46B9`).
+- **Not supported:** the **Fellow Stagg EKG Pro** (a different, WiFi-based kettle with its own protocol) and the original non-smart Stagg EKG.
+
+## Entities
+
+| Entity | Platform | Notes |
+| --- | --- | --- |
+| Kettle (target temp + heat/off) | `climate` | Follows the kettle's F/C unit; range 104-212 F / 40-100 C |
+| Power | `switch` | On/off |
+| Current temperature | `sensor` | Unavailable when off or lifted off the base |
+| Target temperature | `sensor` | |
+| Hold timer | `sensor` | Auto-off countdown (60 min with hold, 5 min post-boil) |
+| Holding temp | `binary_sensor` | On once at target and maintaining |
+| On base | `binary_sensor` | On when seated on the base |
+| Hold enabled | `binary_sensor` | Physical hold-slider position (disabled by default) |
+| Signal strength | `sensor` | Bluetooth RSSI, diagnostic (disabled by default) |
+
+## How data is updated
+
+This is a local **push** integration. While connected, the kettle streams its
+state over Bluetooth notifications (roughly once a second), and Home Assistant
+updates the entities as those arrive - there is no polling of values. The
+optional background poll (on-demand mode) does not poll values; it only briefly
+reconnects to learn whether the kettle has been switched on.
+
+## Known limitations
+
+- **Hold (keep-warm) and the temperature unit (F/C) are physical-only.** The
+  kettle exposes no Bluetooth command for them, so they are read-only here.
+- **One Bluetooth connection at a time.** If another app, bridge, or an old
+  Homebridge/Pi server is connected to the kettle, Home Assistant cannot connect
+  until it is released.
+- **Signal strength is the last advertised value**, not a live measurement (the
+  kettle stops advertising while connected).
+- **Current temperature is unavailable when the kettle is off or lifted** off its
+  base - the kettle only reports a real reading while actively measuring.
+- **On-demand mode without the background poll cannot detect a physical
+  power-on** (see the Connection mode note above).
+
+## Troubleshooting
+
+- **Entities show unavailable / cannot connect:** make sure nothing else is
+  connected to the kettle, and that it is within range of a Bluetooth adapter or
+  ESPHome proxy. Bluetooth allows only one connection at a time.
+- **Slow connects or `[Errno 12] Out of memory` in the log:** these come from the
+  host's Bluetooth adapter being under load, not the integration. A longer
+  background-poll interval or moving the kettle onto an ESPHome Bluetooth proxy
+  reduces the load.
+- **Filing a bug:** open the device page (Settings -> Devices & Services ->
+  Fellow Stagg EKG+ -> the device) and use **Download diagnostics**; attach that
+  to the issue. Enabling debug logging (see below) and including the log helps too.
+
+## Example automation
+
+Notify when the water has reached the set temperature:
+
+```yaml
+automation:
+  - alias: Kettle ready
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.fellow_stagg_ekg_plus_holding_temp
+        to: "on"
+    actions:
+      - action: notify.notify
+        data:
+          message: "The kettle has reached temperature."
+```
+
+## Removing the integration
+
+Go to **Settings -> Devices & Services -> Fellow Stagg EKG+**, open the
+three-dot menu on the entry, and choose **Delete**. If you installed it through
+HACS and want it gone entirely, remove it from HACS afterward and restart Home
+Assistant.
+
 ## Protocol notes
 
 Two details of the kettle's Bluetooth protocol that are easy to get wrong:

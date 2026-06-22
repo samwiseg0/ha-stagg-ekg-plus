@@ -22,6 +22,7 @@ import asyncio
 import contextlib
 import logging
 import time
+from datetime import datetime
 
 from bleak.backends.device import BLEDevice
 from bleak_retry_connector import (
@@ -76,6 +77,8 @@ def _format_duration(seconds: float) -> str:
 
 class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     """Maintains a persistent BLE connection and pushes kettle state to entities."""
+
+    config_entry: ConfigEntry[StaggCoordinator]
 
     def __init__(
         self, hass: HomeAssistant, entry: ConfigEntry, address: str
@@ -303,7 +306,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             self._cancel_keepalive = None
 
     @callback
-    def _keepalive_timer_fired(self, _now) -> None:
+    def _keepalive_timer_fired(self, _now: datetime) -> None:
         self._cancel_keepalive = None
         if (
             self._stopping
@@ -349,7 +352,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             self._cancel_idle_disconnect = None
 
     @callback
-    def _idle_disconnect_fired(self, _now) -> None:
+    def _idle_disconnect_fired(self, _now: datetime) -> None:
         self._cancel_idle_disconnect = None
         # If the kettle came on between arming and firing, keep the link.
         if (
@@ -389,7 +392,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         )
 
     @callback
-    def _reconnect_timer_fired(self, _now) -> None:
+    def _reconnect_timer_fired(self, _now: datetime) -> None:
         self._cancel_reconnect = None
         if (
             self._stopping
@@ -436,7 +439,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             self._cancel_poll = None
 
     @callback
-    def _poll_timer_fired(self, _now) -> None:
+    def _poll_timer_fired(self, _now: datetime) -> None:
         self._cancel_poll = None
         if (
             self._stopping
@@ -594,9 +597,13 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             await self._ensure_connected()
         except Exception as err:  # noqa: BLE001 - boundary: surface as HA error
             raise HomeAssistantError(
-                f"Kettle {self.address} is not reachable over Bluetooth"
+                translation_domain=DOMAIN,
+                translation_key="not_reachable",
+                translation_placeholders={"address": self.address},
             ) from err
         if not self._client.is_connected:
             raise HomeAssistantError(
-                f"Kettle {self.address} is not reachable over Bluetooth"
+                translation_domain=DOMAIN,
+                translation_key="not_reachable",
+                translation_placeholders={"address": self.address},
             )

@@ -39,6 +39,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import StaggConfigEntry
 from .api import KettleState
+from .coordinator import StaggCoordinator
 from .entity import StaggEntity
 
 # Read-only push entities; no command serialization needed.
@@ -114,7 +115,7 @@ class StaggSensor(StaggEntity, SensorEntity):
 
     entity_description: StaggSensorDescription
 
-    def __init__(self, coordinator, description: StaggSensorDescription) -> None:
+    def __init__(self, coordinator: StaggCoordinator, description: StaggSensorDescription) -> None:
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.address}_{description.key}"
@@ -146,7 +147,7 @@ class StaggRssiSensor(StaggEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
 
-    def __init__(self, coordinator) -> None:
+    def __init__(self, coordinator: StaggCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.address}_rssi"
 
