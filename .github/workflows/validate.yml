@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: HACS Action
-        uses: hacs/action@22.5.0
+        uses: hacs/action@main
         with:
           category: integration
 
