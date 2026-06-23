@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+from typing import override
+
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -42,5 +44,6 @@ class StaggEntity(CoordinatorEntity[StaggCoordinator]):
         )
 
     @property
+    @override
     def available(self) -> bool:
         return super().available and self.coordinator.available

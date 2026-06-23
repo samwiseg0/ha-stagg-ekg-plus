@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, override
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
@@ -46,23 +46,28 @@ class StaggPowerSwitch(StaggEntity, SwitchEntity):
     _attr_translation_key = "power"
 
     @property
+    @override
     def unique_id(self) -> str:
         return f"{self.coordinator.address}_power"
 
     @property
+    @override
     def is_on(self) -> bool | None:
         data = self.coordinator.data
         return data.power if data else None
 
     @property
+    @override
     def assumed_state(self) -> bool:
         # While disconnected (on-demand idle), the shown power is the last known
         # value and may be stale if the kettle was toggled physically, so mark
         # it as assumed. A live connection reflects real state.
         return not self.coordinator.is_connected
 
+    @override
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self.coordinator.async_set_power(True)
 
+    @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self.coordinator.async_set_power(False)

@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, override
 
 import voluptuous as vol
 from homeassistant.components.bluetooth import (
@@ -67,6 +67,7 @@ class StaggConfigFlow(ConfigFlow, domain=DOMAIN):
         """Return the options flow handler."""
         return StaggOptionsFlow()
 
+    @override
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> ConfigFlowResult:
@@ -94,6 +95,7 @@ class StaggConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={"name": self._title(self._discovery)},
         )
 
+    @override
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:

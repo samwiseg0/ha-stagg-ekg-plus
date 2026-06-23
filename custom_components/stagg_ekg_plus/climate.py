@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, override
 
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import (
@@ -60,16 +60,20 @@ class StaggClimate(StaggEntity, ClimateEntity):
     _attr_target_temperature_step = 1
 
     @property
+    @override
     def unique_id(self) -> str:
         return self.coordinator.address
 
     @property
     def _is_fahrenheit(self) -> bool:
         data = self.coordinator.data
-        # Default to Fahrenheit only briefly until the first state arrives.
+        # Unit is unknown until the first temperature frame arrives; default to
+        # Celsius for that brief window (no temperature is shown yet, so this is
+        # only cosmetic).
         return bool(data.fahrenheit) if data and data.fahrenheit is not None else False
 
     @property
+    @override
     def temperature_unit(self) -> str:
         return (
             UnitOfTemperature.FAHRENHEIT
@@ -78,14 +82,17 @@ class StaggClimate(StaggEntity, ClimateEntity):
         )
 
     @property
+    @override
     def min_temp(self) -> float:
         return TEMP_MIN_F if self._is_fahrenheit else TEMP_MIN_C
 
     @property
+    @override
     def max_temp(self) -> float:
         return TEMP_MAX_F if self._is_fahrenheit else TEMP_MAX_C
 
     @property
+    @override
     def current_temperature(self) -> float | None:
         data = self.coordinator.data
         if data is None or not data.power:
@@ -94,11 +101,13 @@ class StaggClimate(StaggEntity, ClimateEntity):
         return data.current_temp
 
     @property
+    @override
     def target_temperature(self) -> float | None:
         data = self.coordinator.data
         return data.target_temp if data else None
 
     @property
+    @override
     def hvac_mode(self) -> HVACMode | None:
         data = self.coordinator.data
         if data is None or data.power is None:
@@ -106,23 +115,28 @@ class StaggClimate(StaggEntity, ClimateEntity):
         return HVACMode.HEAT if data.power else HVACMode.OFF
 
     @property
+    @override
     def hvac_action(self) -> HVACAction | None:
         data = self.coordinator.data
         if data is None or data.power is None:
             return None
         return HVACAction.HEATING if data.power else HVACAction.OFF
 
+    @override
     async def async_set_temperature(self, **kwargs: Any) -> None:
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
         await self.coordinator.async_set_target_temp(int(temperature))
 
+    @override
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         await self.coordinator.async_set_power(hvac_mode == HVACMode.HEAT)
 
+    @override
     async def async_turn_on(self) -> None:
         await self.coordinator.async_set_power(True)
 
+    @override
     async def async_turn_off(self) -> None:
         await self.coordinator.async_set_power(False)

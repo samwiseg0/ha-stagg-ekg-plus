@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import override
 
 from homeassistant.components import bluetooth
 from homeassistant.components.sensor import (
@@ -121,11 +122,13 @@ class StaggSensor(StaggEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.address}_{description.key}"
 
     @property
+    @override
     def native_value(self) -> int | None:
         data = self.coordinator.data
         return self.entity_description.value_fn(data) if data else None
 
     @property
+    @override
     def native_unit_of_measurement(self) -> str | None:
         if self.entity_description.unit_fn is None:
             return self.entity_description.native_unit_of_measurement
@@ -152,6 +155,7 @@ class StaggRssiSensor(StaggEntity, SensorEntity):
         self._attr_unique_id = f"{coordinator.address}_rssi"
 
     @property
+    @override
     def native_value(self) -> int | None:
         info = bluetooth.async_last_service_info(
             self.coordinator.hass, self.coordinator.address, connectable=True

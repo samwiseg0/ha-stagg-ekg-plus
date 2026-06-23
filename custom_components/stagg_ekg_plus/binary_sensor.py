@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import override
 
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
@@ -87,6 +88,7 @@ class StaggBinarySensor(StaggEntity, BinarySensorEntity):
         self._attr_unique_id = f"{coordinator.address}_{description.key}"
 
     @property
+    @override
     def is_on(self) -> bool | None:
         data = self.coordinator.data
         return self.entity_description.value_fn(data) if data else None
