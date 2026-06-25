@@ -33,11 +33,11 @@ blueprint:
     notify_target:
       name: Notify Service
       description: >
-        The notify service for your iOS device - must be a direct device
-        service, not a group (e.g., notify.mobile_app_yourphone).
+        Your iOS device notify entity - must be a direct device, not a group.
         Group services do not carry the Live Activity APNs token.
       selector:
-        text:
+        entity:
+          domain: notify
     notification_tag:
       name: Notification Tag
       description: >
@@ -55,6 +55,7 @@ blueprint:
 
 variables:
   climate_var: !input climate_entity
+  notify_var: !input notify_target
 
 triggers:
   - trigger: state
@@ -107,7 +108,7 @@ actions:
           - condition: trigger
             id: power_off
         sequence:
-          - action: !input notify_target
+          - action: "{{ notify_var }}"
             data:
               message: clear_notification
               data:
@@ -117,7 +118,7 @@ actions:
           - condition: trigger
             id: ready
         sequence:
-          - action: !input notify_target
+          - action: "{{ notify_var }}"
             data:
               title: !input device_name
               message: "{{ state_attr(climate_var, 'current_temperature') | int(0) }}°F"
@@ -146,7 +147,7 @@ actions:
             entity_id: !input holding_temp_sensor
             state: "off"
         sequence:
-          - action: !input notify_target
+          - action: "{{ notify_var }}"
             data:
               title: !input device_name
               message: "{{ state_attr(climate_var, 'current_temperature') | int(0) }}°F → {{ state_attr(climate_var, 'temperature') | int(0) }}°F"
