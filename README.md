@@ -29,7 +29,7 @@ project, built as a HACS-installable custom integration.
 - [Troubleshooting](#troubleshooting)
 - [Example automation](#example-automation)
 - [Blueprints](#blueprints)
-  - [Stagg EKG+ iOS Live Activity](#stagg-ekg-ios-live-activity)
+  - [Stagg EKG Plus iOS Live Activity](#stagg-ekg-plus-ios-live-activity)
 - [Removing the integration](#removing-the-integration)
 - [Protocol notes](#protocol-notes)
   - [Hold timer (state frame `0x04`)](#hold-timer-state-frame-0x04)
@@ -168,7 +168,7 @@ automation:
 
 ## Blueprints
 
-### Stagg EKG+ iOS Live Activity
+### Stagg EKG Plus iOS Live Activity
 
 An automation blueprint that shows an iOS **Live Activity** for the kettle: the
 current temperature while it heats, a "Ready" alert when it reaches the target,

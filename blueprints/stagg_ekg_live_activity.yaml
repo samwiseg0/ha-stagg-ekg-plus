@@ -1,7 +1,7 @@
 blueprint:
-  name: Stagg EKG+ iOS Live Activity
+  name: Stagg EKG Plus iOS Live Activity
   description: >
-    Sends an iOS Live Activity for the Fellow Stagg EKG+ kettle - showing
+    Sends an iOS Live Activity for the Fellow Stagg EKG Plus kettle - showing
     current temperature while heating and a "Ready" alert when it reaches
     the target temperature. Requires the ha-stagg-ekg-plus integration.
 
@@ -50,7 +50,7 @@ blueprint:
     device_name:
       name: Device Name
       description: Name shown in the Live Activity header.
-      default: Stagg EKG+
+      default: Stagg EKG Plus
       selector:
         text:
 
