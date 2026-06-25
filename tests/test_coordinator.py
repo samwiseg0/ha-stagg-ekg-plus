@@ -101,6 +101,17 @@ def test_is_connected_property(hass: HomeAssistant) -> None:
     assert coord.is_connected is True
 
 
+def test_is_live_excludes_probe(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass)
+    coord._client = MagicMock(is_connected=True)
+    assert coord.is_live is True
+    coord._probing = True  # a transient background probe is not a live session
+    assert coord.is_live is False
+    coord._client = MagicMock(is_connected=False)
+    coord._probing = False
+    assert coord.is_live is False
+
+
 def test_handle_state_clears_probe_when_powered_on(hass: HomeAssistant) -> None:
     coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND)
     coord._probing = True

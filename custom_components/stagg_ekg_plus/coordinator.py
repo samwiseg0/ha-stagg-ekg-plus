@@ -150,6 +150,16 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     def is_connected(self) -> bool:
         return self._client.is_connected
 
+    @property
+    def is_live(self) -> bool:
+        """Connected in a genuine streaming session, not a transient probe.
+
+        The background poll briefly connects to check for a physical power-on;
+        that is not a state worth presenting as definitive, so it does not
+        count as a live session.
+        """
+        return self._client.is_connected and not self._probing
+
     def _wants_connection(self) -> bool:
         """Whether we want to hold an open connection right now.
 

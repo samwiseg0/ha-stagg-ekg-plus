@@ -64,7 +64,15 @@ def test_switch_assumed_state_tracks_connection(hass: HomeAssistant) -> None:
     coord._client = MagicMock(is_connected=False)
     assert switch.assumed_state is True  # disconnected -> last-known, maybe stale
     coord._client = MagicMock(is_connected=True)
-    assert switch.assumed_state is False  # live connection -> real state
+    assert switch.assumed_state is False  # live session -> real state
+
+
+def test_switch_assumed_state_during_background_probe(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(power=True))
+    switch = StaggPowerSwitch(coord)
+    coord._client = MagicMock(is_connected=True)
+    coord._probing = True  # transient poll connection, not a live session
+    assert switch.assumed_state is True
 
 
 async def test_switch_turn_on_off(hass: HomeAssistant) -> None:

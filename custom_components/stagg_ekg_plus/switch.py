@@ -59,10 +59,11 @@ class StaggPowerSwitch(StaggEntity, SwitchEntity):
     @property
     @override
     def assumed_state(self) -> bool:
-        # While disconnected (on-demand idle), the shown power is the last known
-        # value and may be stale if the kettle was toggled physically, so mark
-        # it as assumed. A live connection reflects real state.
-        return not self.coordinator.is_connected
+        # The shown power is the last known value unless we hold a genuine live
+        # session. While disconnected (on-demand idle) or only momentarily
+        # connected for a background poll, it may be stale if the kettle was
+        # toggled physically, so mark it as assumed.
+        return not self.coordinator.is_live
 
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:
