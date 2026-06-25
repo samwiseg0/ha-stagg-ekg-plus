@@ -33,11 +33,12 @@ blueprint:
     notify_target:
       name: Notify Service
       description: >
-        Your iOS device notify entity - must be a direct device, not a group.
-        Group services do not carry the Live Activity APNs token.
+        The notify service for your iOS device, e.g.
+        notify.mobile_app_yourphone. Must be the mobile_app device service
+        (not a group, and not the notify.<name> entity) - only that service
+        carries the Live Activity payload.
       selector:
-        entity:
-          domain: notify
+        text:
     notification_tag:
       name: Notification Tag
       description: >
