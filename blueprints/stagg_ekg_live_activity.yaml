@@ -72,6 +72,7 @@ triggers:
     entity_id: !input holding_temp_sensor
     from: "on"
     to: "off"
+    for: "00:00:05"
     id: reheating
   - trigger: state
     entity_id: !input power_switch
@@ -83,26 +84,10 @@ triggers:
   - trigger: event
     event_type: automation_reloaded
     id: startup
-  - trigger: time_pattern
-    seconds: "/30"
-    id: tick
 
-conditions:
-  - condition: or
-    conditions:
-      - condition: not
-        conditions:
-          - condition: trigger
-            id: tick
-      - condition: and
-        conditions:
-          - condition: state
-            entity_id: !input power_switch
-            state: "on"
-          - condition: state
-            entity_id: !input holding_temp_sensor
-            state: "off"
-
+# No clock trigger. The periodic "Heating" refresh runs inside a loop that only
+# executes while the kettle is heating, so the automation never fires - and
+# never clutters the logbook or traces - while the kettle is off.
 actions:
   - choose:
       - conditions:
@@ -130,34 +115,31 @@ actions:
                 notification_icon: mdi:kettle
                 notification_icon_color: "#4CAF50"
 
-      - conditions:
-          - condition: or
-            conditions:
-              - condition: trigger
-                id: power_on
-              - condition: trigger
-                id: reheating
-              - condition: trigger
-                id: startup
-              - condition: trigger
-                id: tick
-          - condition: state
-            entity_id: !input power_switch
-            state: "on"
-          - condition: state
-            entity_id: !input holding_temp_sensor
-            state: "off"
-        sequence:
-          - action: "{{ notify_var }}"
-            data:
-              title: !input device_name
-              message: "{{ state_attr(climate_var, 'current_temperature') | int(0) }}°F → {{ state_attr(climate_var, 'temperature') | int(0) }}°F"
+    # power_on / reheating / startup: stream "Heating" updates every 30s for as
+    # long as the kettle is on and not yet holding, then stop on its own.
+    default:
+      - repeat:
+          sequence:
+            - action: "{{ notify_var }}"
               data:
-                tag: !input notification_tag
-                live_update: true
-                silent: true
-                critical_text: "Heating"
-                notification_icon: mdi:kettle
-                notification_icon_color: "#FF6B35"
+                title: !input device_name
+                message: "{{ state_attr(climate_var, 'current_temperature') | int(0) }}°F → {{ state_attr(climate_var, 'temperature') | int(0) }}°F"
+                data:
+                  tag: !input notification_tag
+                  live_update: true
+                  silent: true
+                  critical_text: "Heating"
+                  notification_icon: mdi:kettle
+                  notification_icon_color: "#FF6B35"
+            - delay: "00:00:30"
+          while:
+            - condition: state
+              entity_id: !input power_switch
+              state: "on"
+            - condition: state
+              entity_id: !input holding_temp_sensor
+              state: "off"
 
-mode: single
+# restart: each new event (ready, power off, reheating) preempts a running
+# heating loop and runs the matching branch.
+mode: restart
