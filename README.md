@@ -28,6 +28,8 @@ project, built as a HACS-installable custom integration.
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 - [Example automation](#example-automation)
+- [Blueprints](#blueprints)
+  - [Stagg EKG+ iOS Live Activity](#stagg-ekg-ios-live-activity)
 - [Removing the integration](#removing-the-integration)
 - [Protocol notes](#protocol-notes)
   - [Hold timer (state frame `0x04`)](#hold-timer-state-frame-0x04)
@@ -163,6 +165,31 @@ automation:
         data:
           message: "The kettle has reached temperature."
 ```
+
+## Blueprints
+
+### Stagg EKG+ iOS Live Activity
+
+An automation blueprint that shows an iOS **Live Activity** for the kettle: the
+current temperature while it heats, a "Ready" alert when it reaches the target,
+and it clears when the kettle turns off.
+
+[![Open your Home Assistant instance and show the blueprint import dialog with this blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fsamwiseg0%2Fha-stagg-ekg-plus%2Fblob%2Fmain%2Fblueprints%2Fstagg_ekg_live_activity.yaml)
+
+**Requirements:** Home Assistant 2026.7 or newer, the Home Assistant Companion
+app on iOS (Live Activities need iOS 16.1 or newer), and this integration set up.
+
+Click the button above to import it, then create an automation from the blueprint
+and fill in:
+
+- **Power Switch** - the kettle's `switch` entity
+- **Holding Temp Sensor** - the `binary_sensor.*_holding_temp` entity
+- **Climate Entity** - the kettle's `climate` entity
+- **Notify Service** - your phone's direct notify service
+  (e.g. `notify.mobile_app_yourphone`), not a group (group services do not carry
+  the Live Activity token)
+- **Notification Tag** and **Device Name** - optional; sensible defaults are
+  provided
 
 ## Removing the integration
 

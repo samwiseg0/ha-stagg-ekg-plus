@@ -1,0 +1,161 @@
+blueprint:
+  name: Stagg EKG+ iOS Live Activity
+  description: >
+    Sends an iOS Live Activity for the Fellow Stagg EKG+ kettle - showing
+    current temperature while heating and a "Ready" alert when it reaches
+    the target temperature. Requires the ha-stagg-ekg-plus integration.
+
+  domain: automation
+  author: samwiseg0
+  input:
+    power_switch:
+      name: Power Switch
+      description: The kettle's power switch entity.
+      selector:
+        entity:
+          domain: switch
+    holding_temp_sensor:
+      name: Holding Temp Sensor
+      description: >
+        Binary sensor that is on when the kettle is actively maintaining
+        its target temperature (binary_sensor.*_holding_temp).
+      selector:
+        entity:
+          domain: binary_sensor
+    climate_entity:
+      name: Climate Entity
+      description: >
+        The kettle's climate entity, used to read current and target
+        temperatures for the Live Activity message.
+      selector:
+        entity:
+          domain: climate
+    notify_target:
+      name: Notify Service
+      description: >
+        The notify service for your iOS device - must be a direct device
+        service, not a group (e.g., notify.mobile_app_yourphone).
+        Group services do not carry the Live Activity APNs token.
+      selector:
+        text:
+    notification_tag:
+      name: Notification Tag
+      description: >
+        Unique tag for this Live Activity. Only change this if you are
+        running multiple kettle automations simultaneously.
+      default: stagg_kettle
+      selector:
+        text:
+    device_name:
+      name: Device Name
+      description: Name shown in the Live Activity header.
+      default: Stagg EKG+
+      selector:
+        text:
+
+variables:
+  climate_var: !input climate_entity
+
+triggers:
+  - trigger: state
+    entity_id: !input power_switch
+    to: "on"
+    id: power_on
+  - trigger: state
+    entity_id: !input holding_temp_sensor
+    to: "on"
+    for: "00:00:05"
+    id: ready
+  - trigger: state
+    entity_id: !input holding_temp_sensor
+    from: "on"
+    to: "off"
+    id: reheating
+  - trigger: state
+    entity_id: !input power_switch
+    to: "off"
+    id: power_off
+  - trigger: homeassistant
+    event: start
+    id: startup
+  - trigger: event
+    event_type: automation_reloaded
+    id: startup
+  - trigger: time_pattern
+    seconds: "/30"
+    id: tick
+
+conditions:
+  - condition: or
+    conditions:
+      - condition: not
+        conditions:
+          - condition: trigger
+            id: tick
+      - condition: and
+        conditions:
+          - condition: state
+            entity_id: !input power_switch
+            state: "on"
+          - condition: state
+            entity_id: !input holding_temp_sensor
+            state: "off"
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: power_off
+        sequence:
+          - action: !input notify_target
+            data:
+              message: clear_notification
+              data:
+                tag: !input notification_tag
+
+      - conditions:
+          - condition: trigger
+            id: ready
+        sequence:
+          - action: !input notify_target
+            data:
+              title: !input device_name
+              message: "{{ state_attr(climate_var, 'current_temperature') | int(0) }}°F"
+              data:
+                tag: !input notification_tag
+                live_update: true
+                critical_text: "Ready"
+                notification_icon: mdi:kettle
+                notification_icon_color: "#4CAF50"
+
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: power_on
+              - condition: trigger
+                id: reheating
+              - condition: trigger
+                id: startup
+              - condition: trigger
+                id: tick
+          - condition: state
+            entity_id: !input power_switch
+            state: "on"
+          - condition: state
+            entity_id: !input holding_temp_sensor
+            state: "off"
+        sequence:
+          - action: !input notify_target
+            data:
+              title: !input device_name
+              message: "{{ state_attr(climate_var, 'current_temperature') | int(0) }}°F → {{ state_attr(climate_var, 'temperature') | int(0) }}°F"
+              data:
+                tag: !input notification_tag
+                live_update: true
+                silent: true
+                critical_text: "Heating"
+                notification_icon: mdi:kettle
+                notification_icon_color: "#FF6B35"
+
+mode: single
