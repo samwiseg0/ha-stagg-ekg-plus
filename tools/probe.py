@@ -58,7 +58,7 @@ sys.modules["stagg_api"] = api
 _spec.loader.exec_module(api)
 
 
-def _print_state(state: "api.KettleState") -> None:
+def _print_state(state: api.KettleState) -> None:
     print(f"  STATE -> {state}")
 
 

@@ -7,10 +7,15 @@
 # transitively loads (these are not installed automatically by the test
 # harness). If a future Home Assistant version changes those component
 # dependencies, this list may need updating.
-pytest
-pytest-homeassistant-custom-component
+#
+# The toolchain that defines the build signal is pinned so an upstream release
+# cannot turn CI red with no code change: pytest-homeassistant-custom-component
+# transitively pins Home Assistant core + the bluetooth stack; mypy and ruff are
+# pinned so new checks/rules land via a reviewed Dependabot bump, not a surprise.
+pytest-homeassistant-custom-component==0.13.342
 pytest-cov
-mypy
+mypy==2.1.0
+ruff==0.15.20
 bleak
 bleak-retry-connector
 habluetooth

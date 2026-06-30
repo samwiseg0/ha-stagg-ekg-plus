@@ -31,9 +31,7 @@ jobs:
           fi
 
       - name: Create zip for release
-        run: |
-          cd custom_components/stagg_ekg_plus
-          zip -r ../../stagg_ekg_plus.zip .
+        run: zip -r stagg_ekg_plus.zip custom_components/stagg_ekg_plus
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3

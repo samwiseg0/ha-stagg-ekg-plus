@@ -1,0 +1,28 @@
+# Lint/format config for the Fellow Stagg EKG+ integration.
+# Mirrors Home Assistant core conventions: the formatter owns line length
+# (E501 is ignored in lint), and the BLE (flake8-blind-except) rules back the
+# `# noqa: BLE001` directives already present in the code.
+
+target-version = "py313"
+line-length = 88
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "BLE",    # flake8-blind-except
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+    "ASYNC",  # flake8-async
+]
+ignore = [
+    "E501",  # line length is enforced by the formatter
+]
+
+[lint.per-file-ignores]
+# Standalone dev/debug scripts (not shipped): allow the simple poll loop.
+"tools/*" = ["ASYNC110"]
