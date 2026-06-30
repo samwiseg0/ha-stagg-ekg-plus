@@ -176,8 +176,9 @@ and it clears when the kettle turns off.
 
 [![Open your Home Assistant instance and show the blueprint import dialog with this blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fsamwiseg0%2Fha-stagg-ekg-plus%2Fblob%2Fmain%2Fblueprints%2Fstagg_ekg_live_activity.yaml)
 
-**Requirements:** Home Assistant 2026.7 or newer, the Home Assistant Companion
-app on iOS (Live Activities need iOS 16.1 or newer), and this integration set up.
+**Requirements:** Home Assistant 2026.3 or newer (same as the integration), the
+Home Assistant Companion app on iOS (Live Activities need iOS 16.1 or newer), and
+this integration set up.
 
 Click the button above to import it, then create an automation from the blueprint
 and fill in:

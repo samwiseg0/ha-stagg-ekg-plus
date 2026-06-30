@@ -197,7 +197,7 @@ job installs `requirements_test.txt`).
   surfaced as **Hold enabled** but disabled by default.
 - `auto_off_remaining` (0x04) = the auto-off countdown, 16-bit little-endian
   seconds: 3600 (60 min) with the hold slider on, 300 (5 min) without. Surfaced
-  as the **Auto-off timer** duration sensor (native seconds, suggested minutes).
+  as the **Hold timer** duration sensor (native seconds, suggested minutes).
 - RSSI is exposed as a diagnostic **Signal strength** sensor (disabled by
   default) via `bluetooth.async_last_service_info`; it reflects the last
   advertised RSSI, not a live value (the kettle does not advertise while
