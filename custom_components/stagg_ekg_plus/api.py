@@ -207,6 +207,11 @@ def apply_frame(state: KettleState, frame_type: int, payload: bytes) -> KettleSt
         # Byte 0x01 = kettle on base, 0x00 = lifted off base (verified live).
         if len(payload) == 3:
             return replace(state, lifted=not bool(payload[0]))
+        # The known oversized case is the ~11-byte auth echo (ignored). Any
+        # other length is unexpected; log it so a firmware change is visible
+        # rather than silently dropped.
+        if len(payload) != 11:
+            _LOGGER.debug("Unexpected 0x08 payload length: %s", payload.hex())
         return state
     if frame_type == STATE_AUTO_OFF_COUNTDOWN:
         # 16-bit little-endian seconds, sent as [lo, hi] (repeated). The kettle's
@@ -293,13 +298,19 @@ class StaggClient:
     async def _write(self, data: bytes) -> None:
         if self._client is None:
             raise RuntimeError("Not connected")
-        client = self._client
         # Serialize writes: the switch and climate are separate HA platforms, so
         # PARALLEL_UPDATES does not stop their commands from overlapping on the
         # single characteristic. The lock also keeps retries from interleaving
         # with another command.
         async with self._write_lock:
             for attempt, delay in enumerate(_WRITE_RETRY_BACKOFF):
+                # Re-read the client each attempt: a keep-alive drop + reconnect
+                # during the backoff sleep below swaps self._client to a fresh
+                # BleakClient, and the old handle is dead. Writing to the current
+                # one avoids losing the command on a stale client.
+                client = self._client
+                if client is None:
+                    raise RuntimeError("Not connected")
                 try:
                     await client.write_gatt_char(CHAR_UUID, data, response=False)
                     return

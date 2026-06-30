@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
+from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 
 from . import StaggConfigEntry
@@ -31,6 +32,10 @@ from .const import (
     DEFAULT_POLL_INTERVAL,
 )
 
+# The BLE address is a stable hardware identifier; diagnostics are routinely
+# attached to public issues, so redact it. The decoded state carries no PII.
+TO_REDACT = {"address"}
+
 
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: StaggConfigEntry
@@ -38,15 +43,18 @@ async def async_get_config_entry_diagnostics(
     """Return diagnostics for a config entry."""
     coordinator = entry.runtime_data
     state = coordinator.data
-    return {
-        "address": coordinator.address,
-        "connection_mode": entry.options.get(
-            CONF_CONNECTION_MODE, DEFAULT_CONNECTION_MODE
-        ),
-        "poll_interval": entry.options.get(
-            CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
-        ),
-        "is_connected": coordinator.is_connected,
-        "available": coordinator.available,
-        "state": asdict(state) if state is not None else None,
-    }
+    return async_redact_data(
+        {
+            "address": coordinator.address,
+            "connection_mode": entry.options.get(
+                CONF_CONNECTION_MODE, DEFAULT_CONNECTION_MODE
+            ),
+            "poll_interval": entry.options.get(
+                CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
+            ),
+            "is_connected": coordinator.is_connected,
+            "available": coordinator.available,
+            "state": asdict(state) if state is not None else None,
+        },
+        TO_REDACT,
+    )

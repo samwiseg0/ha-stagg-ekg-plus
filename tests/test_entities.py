@@ -25,15 +25,25 @@ from homeassistant.const import (
     ATTR_TEMPERATURE,
     CONF_ADDRESS,
     UnitOfTemperature,
+    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.stagg_ekg_plus.api import KettleState
+from custom_components.stagg_ekg_plus.binary_sensor import (
+    BINARY_SENSORS,
+    StaggBinarySensor,
+)
 from custom_components.stagg_ekg_plus.climate import StaggClimate
 from custom_components.stagg_ekg_plus.const import DOMAIN
 from custom_components.stagg_ekg_plus.coordinator import StaggCoordinator
-from custom_components.stagg_ekg_plus.sensor import StaggRssiSensor
+from custom_components.stagg_ekg_plus.sensor import (
+    SENSORS,
+    StaggRssiSensor,
+    StaggSensor,
+)
 from custom_components.stagg_ekg_plus.switch import StaggPowerSwitch
 
 ADDRESS = "00:1C:97:16:46:B9"
@@ -46,6 +56,14 @@ def _coordinator(hass: HomeAssistant, state: KettleState | None) -> StaggCoordin
     if state is not None:
         coord.async_set_updated_data(state)
     return coord
+
+
+def _sensor_desc(key: str):
+    return next(d for d in SENSORS if d.key == key)
+
+
+def _binary_desc(key: str):
+    return next(d for d in BINARY_SENSORS if d.key == key)
 
 
 def test_switch_is_on(hass: HomeAssistant) -> None:
@@ -181,3 +199,113 @@ def test_rssi_sensor_value(hass: HomeAssistant) -> None:
         return_value=None,
     ):
         assert sensor.native_value is None
+
+
+# --- climate hvac_action accuracy (powered on != always heating) ------------
+
+
+def test_climate_hvac_action_idle_when_holding(hass: HomeAssistant) -> None:
+    # At setpoint, keep-warm engaged: on but not actively heating -> IDLE.
+    coord = _coordinator(hass, KettleState(power=True, hold=True, fahrenheit=True))
+    assert StaggClimate(coord).hvac_action is HVACAction.IDLE
+
+
+def test_climate_hvac_action_idle_when_lifted(hass: HomeAssistant) -> None:
+    # Lifted off the base: the element cannot heat -> IDLE.
+    coord = _coordinator(hass, KettleState(power=True, lifted=True, fahrenheit=True))
+    assert StaggClimate(coord).hvac_action is HVACAction.IDLE
+
+
+def test_climate_hvac_action_heating_when_warming(hass: HomeAssistant) -> None:
+    coord = _coordinator(
+        hass,
+        KettleState(
+            power=True, hold=False, lifted=False, current_temp=120,
+            target_temp=205, fahrenheit=True,
+        ),
+    )
+    assert StaggClimate(coord).hvac_action is HVACAction.HEATING
+
+
+def test_climate_hvac_action_off_when_powered_off(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(power=False))
+    assert StaggClimate(coord).hvac_action is HVACAction.OFF
+
+
+def test_climate_unknown_unit_follows_system_fahrenheit(hass: HomeAssistant) -> None:
+    # Before the first temperature frame the unit is unknown; fall back to the
+    # HA system unit rather than always assuming Celsius.
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    coord = _coordinator(hass, KettleState(power=None, fahrenheit=None))
+    climate = StaggClimate(coord)
+    assert climate.temperature_unit == UnitOfTemperature.FAHRENHEIT
+    assert climate.min_temp == 104
+    assert climate.max_temp == 212
+
+
+# --- StaggSensor (temperature + countdown descriptions) ---------------------
+
+
+def test_sensor_current_temp_value_and_unit_fahrenheit(hass: HomeAssistant) -> None:
+    coord = _coordinator(
+        hass, KettleState(current_temp=180, fahrenheit=True, power=True)
+    )
+    sensor = StaggSensor(coord, _sensor_desc("current_temperature"))
+    assert sensor.native_value == 180
+    assert sensor.native_unit_of_measurement == UnitOfTemperature.FAHRENHEIT
+
+
+def test_sensor_target_temp_value_and_unit_celsius(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(target_temp=90, fahrenheit=False))
+    sensor = StaggSensor(coord, _sensor_desc("target_temperature"))
+    assert sensor.native_value == 90
+    assert sensor.native_unit_of_measurement == UnitOfTemperature.CELSIUS
+
+
+def test_sensor_countdown_static_unit(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(auto_off_remaining=3600))
+    sensor = StaggSensor(coord, _sensor_desc("countdown"))
+    assert sensor.native_value == 3600
+    # No unit_fn: the static native unit from the description is used.
+    assert sensor.native_unit_of_measurement == UnitOfTime.SECONDS
+
+
+def test_sensor_no_data_returns_none(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, None)
+    sensor = StaggSensor(coord, _sensor_desc("current_temperature"))
+    assert sensor.native_value is None
+    assert sensor.native_unit_of_measurement is None
+
+
+# --- StaggBinarySensor (hold / hold_enabled / on_base) ----------------------
+
+
+def test_binary_sensor_hold(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(hold=True))
+    assert StaggBinarySensor(coord, _binary_desc("hold")).is_on is True
+
+
+def test_binary_sensor_hold_enabled(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(hold_button=True))
+    assert StaggBinarySensor(coord, _binary_desc("hold_enabled")).is_on is True
+
+
+def test_binary_sensor_on_base_seated(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(lifted=False))
+    assert StaggBinarySensor(coord, _binary_desc("on_base")).is_on is True
+
+
+def test_binary_sensor_on_base_lifted(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, KettleState(lifted=True))
+    assert StaggBinarySensor(coord, _binary_desc("on_base")).is_on is False
+
+
+def test_binary_sensor_on_base_unknown_when_lifted_none(hass: HomeAssistant) -> None:
+    # Regression: unknown base state must stay None, not collapse to True.
+    coord = _coordinator(hass, KettleState(lifted=None))
+    assert StaggBinarySensor(coord, _binary_desc("on_base")).is_on is None
+
+
+def test_binary_sensor_no_data_returns_none(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, None)
+    assert StaggBinarySensor(coord, _binary_desc("hold")).is_on is None

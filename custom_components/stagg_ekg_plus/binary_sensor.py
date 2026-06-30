@@ -60,7 +60,10 @@ BINARY_SENSORS: tuple[StaggBinaryDescription, ...] = (
     StaggBinaryDescription(
         key="on_base",
         translation_key="on_base",
-        value_fn=lambda state: not state.lifted,
+        # Preserve unknown: lifted defaults to None until the first 0x08 frame.
+        # `not None` would wrongly assert "on base" from no data, unlike the
+        # hold sensors which pass their value straight through.
+        value_fn=lambda state: None if state.lifted is None else not state.lifted,
     ),
 )
 

@@ -99,7 +99,8 @@ async def test_diagnostics(hass: HomeAssistant) -> None:
 
         diag = await async_get_config_entry_diagnostics(hass, entry)
 
-    assert diag["address"] == ADDRESS
+    # The BLE address is redacted (diagnostics are routinely shared publicly).
+    assert diag["address"] == "**REDACTED**"
     assert diag["connection_mode"] == "on_demand"
     assert diag["poll_interval"] == 0
     assert diag["state"]["target_temp"] == 200

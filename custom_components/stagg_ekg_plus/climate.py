@@ -67,10 +67,14 @@ class StaggClimate(StaggEntity, ClimateEntity):
     @property
     def _is_fahrenheit(self) -> bool:
         data = self.coordinator.data
-        # Unit is unknown until the first temperature frame arrives; default to
-        # Celsius for that brief window (no temperature is shown yet, so this is
-        # only cosmetic).
-        return bool(data.fahrenheit) if data and data.fahrenheit is not None else False
+        if data and data.fahrenheit is not None:
+            return bool(data.fahrenheit)
+        # Unit is unknown until the first temperature frame arrives (only the
+        # first connection after a fresh start). Fall back to the HA system
+        # unit so the slider range matches the user's locale until the kettle's
+        # own setting arrives, instead of always assuming Celsius.
+        units = self.coordinator.hass.config.units
+        return units.temperature_unit == UnitOfTemperature.FAHRENHEIT
 
     @property
     @override
@@ -120,7 +124,14 @@ class StaggClimate(StaggEntity, ClimateEntity):
         data = self.coordinator.data
         if data is None or data.power is None:
             return None
-        return HVACAction.HEATING if data.power else HVACAction.OFF
+        if not data.power:
+            return HVACAction.OFF
+        # Powered on but not actively heating the element: keep-warm/holding at
+        # the setpoint (0x06), or lifted off the base where it cannot heat
+        # (0x08). Report IDLE rather than a misleading permanent "Heating".
+        if data.hold or data.lifted:
+            return HVACAction.IDLE
+        return HVACAction.HEATING
 
     @override
     async def async_set_temperature(self, **kwargs: Any) -> None:

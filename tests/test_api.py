@@ -23,6 +23,7 @@ tested with plain pytest -- no Home Assistant install required.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import importlib.util
 import sys
 from pathlib import Path
@@ -199,6 +200,13 @@ def test_apply_frame_lifted_oversized_auth_echo_ignored():
     assert s.lifted is None  # not the 3-byte state frame
 
 
+def test_apply_frame_lifted_unexpected_length_ignored():
+    # Neither the 3-byte state frame nor the ~11-byte auth echo: left unchanged
+    # (and debug-logged so a firmware change is visible).
+    s = api.apply_frame(api.KettleState(), api.STATE_LIFTED, bytes([0x01, 0x01]))
+    assert s.lifted is None
+
+
 def test_apply_frame_auto_off_16bit_le():
     s = api.apply_frame(
         api.KettleState(), api.STATE_AUTO_OFF_COUNTDOWN, bytes([0x10, 0x0E, 0x10, 0x0E])
@@ -289,7 +297,7 @@ def test_handle_notify_trims_to_last_separator():
 
 def test_kettlestate_is_frozen():
     state = api.KettleState()
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         state.power = True  # type: ignore[misc]
 
 
@@ -413,6 +421,53 @@ async def test_client_write_raises_on_non_retryable_dbus_error():
     client._client.write_gatt_char.assert_awaited_once()
 
 
+async def test_client_write_rereads_client_each_retry():
+    """A reconnect that swaps self._client mid-retry is targeted, not the stale one."""
+    from unittest.mock import AsyncMock, patch
+
+    from bleak.exc import BleakDBusError
+
+    client = api.StaggClient()
+    old = AsyncMock(is_connected=True)
+    new = AsyncMock(is_connected=True)
+    client._client = old
+
+    async def _fail_then_swap(_uuid, _data, response=False):
+        # Simulate a keep-alive drop + reconnect replacing the client during the
+        # backoff: the first (stale) handle fails transiently, then is swapped.
+        client._client = new
+        raise BleakDBusError("org.bluez.Error.InProgress", [])
+
+    old.write_gatt_char.side_effect = _fail_then_swap
+    with patch.object(api.asyncio, "sleep", AsyncMock()):
+        await client.set_power(True)
+    # The retry went to the fresh client, not the dead one.
+    old.write_gatt_char.assert_awaited_once()
+    new.write_gatt_char.assert_awaited_once()
+
+
+async def test_client_write_aborts_if_client_dropped_mid_retry():
+    """A disconnect that nulls the client during the backoff aborts the retry."""
+    from unittest.mock import AsyncMock, patch
+
+    from bleak.exc import BleakDBusError
+
+    client = api.StaggClient()
+    first = AsyncMock(is_connected=True)
+    client._client = first
+
+    async def _fail_then_drop(_uuid, _data, response=False):
+        client._client = None  # simulate a disconnect during the write
+        raise BleakDBusError("org.bluez.Error.InProgress", [])
+
+    first.write_gatt_char.side_effect = _fail_then_drop
+    with (
+        patch.object(api.asyncio, "sleep", AsyncMock()),
+        pytest.raises(RuntimeError),
+    ):
+        await client.set_power(True)
+
+
 async def test_client_write_retry_exhausted_raises():
     from unittest.mock import AsyncMock, patch
 
@@ -423,9 +478,11 @@ async def test_client_write_retry_exhausted_raises():
     client._client.write_gatt_char.side_effect = BleakDBusError(
         "org.bluez.Error.Failed", []
     )
-    with patch.object(api.asyncio, "sleep", AsyncMock()):
-        with pytest.raises(BleakDBusError):
-            await client.set_power(True)
+    with (
+        patch.object(api.asyncio, "sleep", AsyncMock()),
+        pytest.raises(BleakDBusError),
+    ):
+        await client.set_power(True)
     # One attempt per backoff entry, then it gives up.
     assert client._client.write_gatt_char.await_count == len(api._WRITE_RETRY_BACKOFF)
 
