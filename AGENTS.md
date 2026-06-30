@@ -187,6 +187,23 @@ job installs `requirements_test.txt`).
   `dr.CONNECTION_BLUETOOTH` for device connections.
 - Do not reintroduce a separate server/add-on; keep the single-integration design.
 
+## Releasing
+
+To cut a release `X.Y.Z`:
+
+1. Bump `version` in `manifest.json` to `X.Y.Z`.
+2. Add a `## X.Y.Z` section to `CHANGELOG.md` (top of the list) using the
+   established `### Fixed / Changed / Added / Internal / Notes` subsections.
+3. Commit, then tag `vX.Y.Z` and push the tag.
+
+`.github/workflows/release.yml` (on tag `v*`) verifies the tag matches the
+manifest version, extracts the matching `CHANGELOG.md` section as the release
+notes (prepending the `## What's new in X.Y.Z` heading), zips
+`custom_components/stagg_ekg_plus`, and publishes the GitHub release. The job
+**fails** if no `## X.Y.Z` section exists, so the changelog entry is required.
+For a new integration listing, update the release/action links in the
+`hacs/default` PR after the release publishes.
+
 ## Known open items / calibration TODO
 
 - `hold` (0x06) = "actively holding/maintaining temperature": True once at

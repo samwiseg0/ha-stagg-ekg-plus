@@ -30,6 +30,31 @@ jobs:
             exit 1
           fi
 
+      - name: Extract release notes from CHANGELOG
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Print the "## <version>" section, trimming surrounding blank lines.
+          awk -v ver="$VERSION" '
+            $0 ~ "^## "ver"([ ].*)?$" {flag=1; next}
+            /^## / && flag {exit}
+            flag {
+              if (!started && $0 ~ /^[[:space:]]*$/) next
+              started=1; buf[n++]=$0
+            }
+            END {
+              while (n > 0 && buf[n-1] ~ /^[[:space:]]*$/) n--
+              for (i = 0; i < n; i++) print buf[i]
+            }
+          ' CHANGELOG.md > section.md
+          if [ ! -s section.md ]; then
+            echo "No CHANGELOG.md section found for version $VERSION"
+            exit 1
+          fi
+          # Re-add the "What's new in" heading prior releases use.
+          { printf "## What's new in %s\n\n" "$VERSION"; cat section.md; } > release_notes.md
+          echo "Release notes for $VERSION:"
+          cat release_notes.md
+
       - name: Create zip for release
         run: zip -r stagg_ekg_plus.zip custom_components/stagg_ekg_plus
 
@@ -38,5 +63,5 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: release_notes.md
           files: stagg_ekg_plus.zip
