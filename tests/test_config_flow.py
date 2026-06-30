@@ -36,11 +36,18 @@ from custom_components.stagg_ekg_plus.const import (
 )
 
 ADDRESS = "00:1C:97:16:46:B9"
+SERVICE_UUID = "00001820-0000-1000-8000-00805f9b34fb"
 
 
-def _service_info(address: str = ADDRESS, name: str = "FELLOW46B9"):
+def _service_info(
+    address: str = ADDRESS,
+    name: str = "FELLOW46B9",
+    service_uuids: list[str] | None = None,
+):
     """A minimal stand-in for BluetoothServiceInfoBleak used by the flow."""
-    return SimpleNamespace(address=address, name=name, service_uuids=[])
+    return SimpleNamespace(
+        address=address, name=name, service_uuids=service_uuids or []
+    )
 
 
 async def test_bluetooth_discovery_creates_entry(hass: HomeAssistant) -> None:
@@ -113,6 +120,41 @@ async def test_user_step_creates_entry(hass: HomeAssistant) -> None:
 
     assert result2["type"] is FlowResultType.CREATE_ENTRY
     assert result2["data"] == {CONF_ADDRESS: ADDRESS}
+
+
+async def test_user_step_matches_by_service_uuid(hass: HomeAssistant) -> None:
+    """A device with no FELLOW name but the kettle service UUID is offered.
+
+    Exercises the service-UUID branch of _is_kettle and its .lower()
+    normalization (the UUID is advertised uppercase here).
+    """
+    with patch(
+        "custom_components.stagg_ekg_plus.config_flow.async_discovered_service_info",
+        return_value=[_service_info(name="", service_uuids=[SERVICE_UUID.upper()])],
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+
+
+async def test_user_step_skips_non_kettle(hass: HomeAssistant) -> None:
+    """A non-Fellow device with an unrelated UUID is filtered out."""
+    with patch(
+        "custom_components.stagg_ekg_plus.config_flow.async_discovered_service_info",
+        return_value=[
+            _service_info(
+                name="Some Speaker",
+                service_uuids=["0000180a-0000-1000-8000-00805f9b34fb"],
+            )
+        ],
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_USER}
+        )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_devices_found"
 
 
 async def test_user_step_skips_already_configured(hass: HomeAssistant) -> None:

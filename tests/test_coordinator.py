@@ -239,9 +239,20 @@ async def test_async_start_on_demand_schedules_poll(hass: HomeAssistant) -> None
 async def test_async_stop_disconnects(hass: HomeAssistant) -> None:
     coord = _coordinator(hass)
     coord._client = AsyncMock()
+    # All four pending timers must be cancelled on stop (leak prevention).
+    cancels = {
+        "_cancel_reconnect": MagicMock(),
+        "_cancel_keepalive": MagicMock(),
+        "_cancel_idle_disconnect": MagicMock(),
+        "_cancel_poll": MagicMock(),
+    }
+    for attr, mock in cancels.items():
+        setattr(coord, attr, mock)
     await coord.async_stop()
     assert coord._stopping is True
     coord._client.disconnect.assert_awaited_once()
+    for mock in cancels.values():
+        mock.assert_called_once()
 
 
 async def test_ensure_connected_success(hass: HomeAssistant) -> None:
@@ -664,9 +675,8 @@ async def test_command_raises_when_connect_fails(hass: HomeAssistant) -> None:
     coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND)
     with patch.object(
         coord, "_ensure_connected", AsyncMock(side_effect=RuntimeError("x"))
-    ):
-        with pytest.raises(HomeAssistantError) as exc:
-            await coord._ensure_command_connection()
+    ), pytest.raises(HomeAssistantError) as exc:
+        await coord._ensure_command_connection()
     assert exc.value.translation_key == "not_reachable"
 
 
