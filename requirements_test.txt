@@ -12,7 +12,7 @@
 # cannot turn CI red with no code change: pytest-homeassistant-custom-component
 # transitively pins Home Assistant core + the bluetooth stack; mypy and ruff are
 # pinned so new checks/rules land via a reviewed Dependabot bump, not a surprise.
-pytest-homeassistant-custom-component==0.13.316
+pytest-homeassistant-custom-component==0.13.343
 pytest-cov
 mypy==2.1.0
 ruff==0.15.20
