@@ -9,6 +9,13 @@ on:
 
 permissions: {}
 
+# Tracks the lowest Python that the pinned pytest-homeassistant-custom-component
+# in requirements_test.txt will install on: it follows Home Assistant core's
+# requires-python, so a bump that raises that floor has to raise this in step or
+# every Python job fails at pip install. One place, so the three jobs cannot drift.
+env:
+  PYTHON_VERSION: "3.14"
+
 jobs:
   validate-hacs:
     runs-on: ubuntu-latest
@@ -34,7 +41,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install test dependencies
         run: pip install -r requirements_test.txt
       - name: Run tests
@@ -53,7 +60,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install test dependencies
         run: pip install -r requirements_test.txt
       - name: Run mypy --strict
@@ -66,7 +73,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install ruff
         run: pip install -r requirements_test.txt
       - name: Run ruff check
