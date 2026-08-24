@@ -4,13 +4,13 @@
 [![Build Status](https://img.shields.io/github/actions/workflow/status/samwiseg0/ha-stagg-ekg-plus/validate.yml?branch=main&style=flat-square)](https://github.com/samwiseg0/ha-stagg-ekg-plus/actions/workflows/validate.yml)
 [![Test Coverage](https://img.shields.io/codecov/c/gh/samwiseg0/ha-stagg-ekg-plus?style=flat-square)](https://app.codecov.io/gh/samwiseg0/ha-stagg-ekg-plus/)
 [![License](https://img.shields.io/github/license/samwiseg0/ha-stagg-ekg-plus.svg?style=flat-square)](LICENSE)
-[![hacs](https://img.shields.io/badge/HACS-Custom-orange.svg?style=flat-square)](https://hacs.xyz/docs/faq/custom_repositories)
+[![hacs](https://img.shields.io/badge/HACS-Default-blue.svg?style=flat-square)](https://hacs.xyz)
 
 A native Home Assistant integration for the [Fellow Stagg EKG+](https://fellowproducts.com/products/stagg-ekg-plus) electric kettle. It talks to the kettle directly over Bluetooth LE using Home Assistant's built-in Bluetooth stack, so **no separate bridge, server, or Homebridge instance is required**.
 
 This is a from-scratch reimplementation of the protocol used by the
 [homebridge-stagg-ekg-plus](https://github.com/philscott-dev/homebridge-stagg-ekg-plus)
-project, built as a HACS-installable custom integration.
+project, available in HACS.
 
 ## Contents
 
@@ -70,7 +70,7 @@ project, built as a HACS-installable custom integration.
 
 [![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=samwiseg0&repository=ha-stagg-ekg-plus&category=integration)
 
-1. Click the button above (or in HACS, add this repository as a custom repository with category **Integration**).
+1. Click the button above, or search for **Fellow Stagg EKG+** in HACS.
 2. Install **Fellow Stagg EKG+**.
 3. Restart Home Assistant.
 

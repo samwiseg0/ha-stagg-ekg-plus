@@ -6,6 +6,19 @@ Before tagging a release, add a `## <version>` section (matching the version in
 GitHub release notes. Older releases predate this file - see the
 [releases page](https://github.com/samwiseg0/ha-stagg-ekg-plus/releases).
 
+## 0.7.7
+
+Now available directly in HACS.
+
+### Changed
+- Installation through HACS no longer needs a custom repository. The integration is in the HACS default list.
+
+### Internal
+- Dropped `bleak-retry-connector` from `manifest.json` requirements. Home Assistant core ships and pins that package, so declaring it here added nothing and could only conflict if the pins diverged.
+
+### Notes
+- No changes to options, entities, or the protocol. Existing installs upgrade transparently.
+
 ## 0.7.6
 
 Entity-accuracy fixes and Bluetooth/diagnostics hardening, plus CI and test-quality improvements.
