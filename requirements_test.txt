@@ -14,7 +14,7 @@
 # pinned so new checks/rules land via a reviewed Dependabot bump, not a surprise.
 pytest-homeassistant-custom-component==0.13.366
 pytest-cov
-mypy==2.3.1
+mypy==2.4.0
 ruff==0.16.8
 bleak
 bleak-retry-connector
