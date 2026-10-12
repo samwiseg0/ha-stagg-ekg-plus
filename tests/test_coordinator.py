@@ -297,9 +297,7 @@ async def test_ensure_connected_refreshes_device_on_retry(
     with (
         # 1st call (top of _ensure_connected) -> initial; then the callback
         # returns a fresher device, then None (HA lost the record).
-        patch.object(
-            coord, "_get_ble_device", side_effect=[initial, fresh, None]
-        ),
+        patch.object(coord, "_get_ble_device", side_effect=[initial, fresh, None]),
         patch(f"{_CO}.establish_connection", _establish),
         patch.object(coord._client, "start", AsyncMock()),
         patch.object(coord, "_reset_keepalive"),
@@ -309,7 +307,6 @@ async def test_ensure_connected_refreshes_device_on_retry(
         assert callable(callback)
         assert callback() is fresh  # freshest device on a retry
         assert callback() is initial  # falls back when HA has none
-
 
 
 async def test_ensure_connected_reload_race(hass: HomeAssistant) -> None:
@@ -673,9 +670,12 @@ async def test_ensure_connected_noop_when_connected(hass: HomeAssistant) -> None
 
 async def test_command_raises_when_connect_fails(hass: HomeAssistant) -> None:
     coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND)
-    with patch.object(
-        coord, "_ensure_connected", AsyncMock(side_effect=RuntimeError("x"))
-    ), pytest.raises(HomeAssistantError) as exc:
+    with (
+        patch.object(
+            coord, "_ensure_connected", AsyncMock(side_effect=RuntimeError("x"))
+        ),
+        pytest.raises(HomeAssistantError) as exc,
+    ):
         await coord._ensure_command_connection()
     assert exc.value.translation_key == "not_reachable"
 
@@ -718,6 +718,3 @@ def test_keepalive_watchdog_to_reconnect_chain(hass: HomeAssistant) -> None:
         coord._on_disconnect(MagicMock())
     reconnect.assert_called_once()
     assert coord._stale_disconnect is False
-
-
-

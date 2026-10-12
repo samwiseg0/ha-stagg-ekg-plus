@@ -80,15 +80,21 @@ async def find_device(address: str | None):
         timeout=15.0,
     )
     if device is None:
-        print("Kettle not found. Is it powered/advertising and not connected elsewhere?")
+        print(
+            "Kettle not found. Is it powered/advertising and not connected elsewhere?"
+        )
     return device
 
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description="Stagg EKG+ BLE protocol probe")
     parser.add_argument("--address", help="BLE address/UUID to connect to directly")
-    parser.add_argument("--power", choices=["on", "off"], help="Set power before listening")
-    parser.add_argument("--temp", type=int, help="Set target temp (display units) before listening")
+    parser.add_argument(
+        "--power", choices=["on", "off"], help="Set power before listening"
+    )
+    parser.add_argument(
+        "--temp", type=int, help="Set target temp (display units) before listening"
+    )
     parser.add_argument("--duration", type=float, default=30.0, help="Listen seconds")
     args = parser.parse_args()
 

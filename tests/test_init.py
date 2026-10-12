@@ -112,9 +112,7 @@ async def test_update_listener_reloads_entry(hass: HomeAssistant) -> None:
     entry = _entry()
     entry.add_to_hass(hass)
 
-    with patch.object(
-        hass.config_entries, "async_reload", AsyncMock()
-    ) as reload:
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload:
         await _async_update_listener(hass, entry)
 
     reload.assert_awaited_once_with(entry.entry_id)
@@ -151,9 +149,7 @@ async def test_entities_reflect_coordinator_state(hass: HomeAssistant) -> None:
         # Push a new state: powered on and measuring. Entities must update.
         coordinator: StaggCoordinator = entry.runtime_data
         coordinator.async_set_updated_data(
-            KettleState(
-                power=True, target_temp=205, current_temp=180, fahrenheit=True
-            )
+            KettleState(power=True, target_temp=205, current_temp=180, fahrenheit=True)
         )
         await hass.async_block_till_done()
 
@@ -162,5 +158,3 @@ async def test_entities_reflect_coordinator_state(hass: HomeAssistant) -> None:
         assert climate.attributes["temperature"] == 205
         assert climate.attributes["current_temperature"] == 180
         assert hass.states.get(switch_ids[0]).state == "on"
-
-

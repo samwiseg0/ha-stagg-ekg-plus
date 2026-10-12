@@ -75,9 +75,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the kettle binary sensors."""
     coordinator = entry.runtime_data
-    async_add_entities(
-        StaggBinarySensor(coordinator, desc) for desc in BINARY_SENSORS
-    )
+    async_add_entities(StaggBinarySensor(coordinator, desc) for desc in BINARY_SENSORS)
 
 
 class StaggBinarySensor(StaggEntity, BinarySensorEntity):
@@ -85,7 +83,9 @@ class StaggBinarySensor(StaggEntity, BinarySensorEntity):
 
     entity_description: StaggBinaryDescription
 
-    def __init__(self, coordinator: StaggCoordinator, description: StaggBinaryDescription) -> None:
+    def __init__(
+        self, coordinator: StaggCoordinator, description: StaggBinaryDescription
+    ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.address}_{description.key}"

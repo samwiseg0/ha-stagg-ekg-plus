@@ -59,9 +59,7 @@ class StaggSensorDescription(SensorEntityDescription):
 
 def _temp_unit(state: KettleState) -> str:
     return (
-        UnitOfTemperature.FAHRENHEIT
-        if state.fahrenheit
-        else UnitOfTemperature.CELSIUS
+        UnitOfTemperature.FAHRENHEIT if state.fahrenheit else UnitOfTemperature.CELSIUS
     )
 
 
@@ -116,7 +114,9 @@ class StaggSensor(StaggEntity, SensorEntity):
 
     entity_description: StaggSensorDescription
 
-    def __init__(self, coordinator: StaggCoordinator, description: StaggSensorDescription) -> None:
+    def __init__(
+        self, coordinator: StaggCoordinator, description: StaggSensorDescription
+    ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.address}_{description.key}"

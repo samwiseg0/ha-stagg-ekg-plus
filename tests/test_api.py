@@ -323,7 +323,6 @@ async def test_client_connect_uses_bleak_client():
     assert client.is_connected
 
 
-
 async def test_client_start_subscribes_and_authenticates():
     from unittest.mock import AsyncMock
 
@@ -494,4 +493,3 @@ async def test_client_disconnect_clears_client():
     client._client = AsyncMock()
     await client.disconnect()
     assert client._client is None
-
