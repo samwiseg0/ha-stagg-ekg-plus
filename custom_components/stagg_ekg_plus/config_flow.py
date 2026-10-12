@@ -18,9 +18,8 @@
 
 from __future__ import annotations
 
-from typing import Any, override
+from typing import TYPE_CHECKING, Any, override
 
-import voluptuous as vol
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_discovered_service_info,
@@ -50,6 +49,13 @@ from .const import (
     MODEL,
     POLL_INTERVAL_OPTIONS,
 )
+
+if TYPE_CHECKING:
+    # HA 2026.9+ swaps in probatio as voluptuous at startup. Older HA has only
+    # voluptuous, so type-check against probatio but import voluptuous.
+    import probatio as vol
+else:
+    import voluptuous as vol
 
 
 class StaggConfigFlow(ConfigFlow, domain=DOMAIN):
