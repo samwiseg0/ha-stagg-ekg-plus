@@ -80,9 +80,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
 
     config_entry: ConfigEntry[StaggCoordinator]
 
-    def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, address: str
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, address: str) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -223,11 +221,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         change: BluetoothChange,
     ) -> None:
         """Reconnect instantly when the kettle advertises."""
-        if (
-            self._stopping
-            or self._client.is_connected
-            or not self._wants_connection()
-        ):
+        if self._stopping or self._client.is_connected or not self._wants_connection():
             return
         # A fresh advertisement is the best moment to (re)connect.
         self._cancel_pending_reconnect()
@@ -284,9 +278,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         # We want to stay connected but the link dropped on its own.
         if stale:
             # The keep-alive watchdog already logged why at INFO.
-            _LOGGER.info(
-                "Kettle %s disconnected%s; reconnecting", self.address, suffix
-            )
+            _LOGGER.info("Kettle %s disconnected%s; reconnecting", self.address, suffix)
         else:
             _LOGGER.warning(
                 "Kettle %s unexpectedly disconnected%s; reconnecting",
@@ -365,11 +357,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     def _idle_disconnect_fired(self, _now: datetime) -> None:
         self._cancel_idle_disconnect = None
         # If the kettle came on between arming and firing, keep the link.
-        if (
-            self._stopping
-            or not self._client.is_connected
-            or self._wants_connection()
-        ):
+        if self._stopping or not self._client.is_connected or self._wants_connection():
             return
         _LOGGER.debug("Idle disconnect from kettle %s", self.address)
         self.config_entry.async_create_background_task(
@@ -404,11 +392,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     @callback
     def _reconnect_timer_fired(self, _now: datetime) -> None:
         self._cancel_reconnect = None
-        if (
-            self._stopping
-            or self._client.is_connected
-            or not self._wants_connection()
-        ):
+        if self._stopping or self._client.is_connected or not self._wants_connection():
             return
         self.config_entry.async_create_background_task(
             self.hass, self._async_reconnect(), name=f"{DOMAIN}_reconnect"
@@ -451,11 +435,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     @callback
     def _poll_timer_fired(self, _now: datetime) -> None:
         self._cancel_poll = None
-        if (
-            self._stopping
-            or self._client.is_connected
-            or self._wants_connection()
-        ):
+        if self._stopping or self._client.is_connected or self._wants_connection():
             # Already online; nothing to probe. Try again next interval if we
             # fall back to the idle/disconnected state.
             self._schedule_poll()

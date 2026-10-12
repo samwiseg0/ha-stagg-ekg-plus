@@ -42,9 +42,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: StaggConfigEntry) -> boo
     try:
         await coordinator.async_start()
     except Exception as err:  # noqa: BLE001 - surface any connect failure as not-ready
-        raise ConfigEntryNotReady(
-            f"Could not connect to kettle {address}"
-        ) from err
+        raise ConfigEntryNotReady(f"Could not connect to kettle {address}") from err
 
     entry.runtime_data = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -52,9 +50,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: StaggConfigEntry) -> boo
     return True
 
 
-async def _async_update_listener(
-    hass: HomeAssistant, entry: StaggConfigEntry
-) -> None:
+async def _async_update_listener(hass: HomeAssistant, entry: StaggConfigEntry) -> None:
     """Reload the entry when its options change (e.g. connection mode)."""
     await hass.config_entries.async_reload(entry.entry_id)
 

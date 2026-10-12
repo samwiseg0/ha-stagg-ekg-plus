@@ -193,9 +193,7 @@ class StaggOptionsFlow(OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONF_CONNECTION_MODE, default=current
-                    ): SelectSelector(
+                    vol.Required(CONF_CONNECTION_MODE, default=current): SelectSelector(
                         SelectSelectorConfig(
                             options=[
                                 CONNECTION_MODE_PERSISTENT,
@@ -223,9 +221,7 @@ class StaggOptionsFlow(OptionsFlow):
             )
 
         current_poll = str(
-            self.config_entry.options.get(
-                CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL
-            )
+            self.config_entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
         )
         return self.async_show_form(
             step_id="poll",

@@ -50,7 +50,9 @@ ADDRESS = "00:1C:97:16:46:B9"
 
 
 def _coordinator(hass: HomeAssistant, state: KettleState | None) -> StaggCoordinator:
-    entry = MockConfigEntry(domain=DOMAIN, unique_id=ADDRESS, data={CONF_ADDRESS: ADDRESS})
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id=ADDRESS, data={CONF_ADDRESS: ADDRESS}
+    )
     entry.add_to_hass(hass)
     coord = StaggCoordinator(hass, entry, ADDRESS)
     if state is not None:
@@ -118,7 +120,8 @@ def test_climate_modes_and_temps(hass: HomeAssistant) -> None:
 
 def test_climate_off_hides_current_temp(hass: HomeAssistant) -> None:
     coord = _coordinator(
-        hass, KettleState(power=False, target_temp=208, current_temp=180, fahrenheit=True)
+        hass,
+        KettleState(power=False, target_temp=208, current_temp=180, fahrenheit=True),
     )
     climate = StaggClimate(coord)
     assert climate.hvac_mode is HVACMode.OFF
@@ -220,8 +223,12 @@ def test_climate_hvac_action_heating_when_warming(hass: HomeAssistant) -> None:
     coord = _coordinator(
         hass,
         KettleState(
-            power=True, hold=False, lifted=False, current_temp=120,
-            target_temp=205, fahrenheit=True,
+            power=True,
+            hold=False,
+            lifted=False,
+            current_temp=120,
+            target_temp=205,
+            fahrenheit=True,
         ),
     )
     assert StaggClimate(coord).hvac_action is HVACAction.HEATING

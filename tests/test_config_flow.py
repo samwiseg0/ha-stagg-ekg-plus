@@ -75,9 +75,9 @@ async def test_bluetooth_discovery_already_configured_aborts(
     hass: HomeAssistant,
 ) -> None:
     """A second discovery of an existing kettle aborts."""
-    MockConfigEntry(domain=DOMAIN, unique_id=ADDRESS, data={CONF_ADDRESS: ADDRESS}).add_to_hass(
-        hass
-    )
+    MockConfigEntry(
+        domain=DOMAIN, unique_id=ADDRESS, data={CONF_ADDRESS: ADDRESS}
+    ).add_to_hass(hass)
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_BLUETOOTH}, data=_service_info()
     )
