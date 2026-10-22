@@ -274,6 +274,27 @@ def test_handle_notify_decodes_fragmented_frames():
     assert seen and seen[-1].power is True
 
 
+def test_handle_notify_reports_every_frame_but_only_changed_state():
+    states: list = []
+    frames: list = []
+    client = api.StaggClient(
+        on_state=states.append, on_frame=lambda: frames.append(None)
+    )
+    # An idle kettle repeats the same state frame about once a second.
+    for _ in range(3):
+        client._handle_notify(None, bytearray.fromhex("efdd00010100"))
+        client._handle_notify(None, bytearray(api.FRAME_SEPARATOR))
+    assert len(states) == 1
+    assert len(frames) == 3
+
+
+def test_handle_notify_no_frame_callback_without_complete_frame():
+    frames: list = []
+    client = api.StaggClient(on_frame=lambda: frames.append(None))
+    client._handle_notify(None, bytearray.fromhex("efdd00"))
+    assert frames == []
+
+
 def test_handle_notify_buffer_is_bounded_on_garbage():
     client = api.StaggClient()
     # Feed a long separatorless garbage stream; the buffer must not grow without

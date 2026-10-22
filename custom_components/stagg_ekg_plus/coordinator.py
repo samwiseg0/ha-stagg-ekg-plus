@@ -89,7 +89,9 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             config_entry=entry,
         )
         self.address = address
-        self._client = StaggClient(on_state=self._handle_state)
+        self._client = StaggClient(
+            on_state=self._handle_state, on_frame=self._handle_frame
+        )
         self._connect_lock = asyncio.Lock()
         self._stopping = False
         self._reconnect_attempt = 0
@@ -141,7 +143,13 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                     else ON_DEMAND_DISCONNECT_DELAY
                 )
                 self._schedule_idle_disconnect(reset=False, delay=delay)
-        # Every notification proves the link is alive; restart the watchdog.
+
+    @callback
+    def _handle_frame(self) -> None:
+        # Every frame proves the link is alive, including the identical state
+        # the kettle repeats about once a second while idle; restart the
+        # watchdog. Resetting only on a state change would drop a healthy idle
+        # link every KEEP_ALIVE_TIMEOUT seconds.
         self._reset_keepalive()
 
     @property
@@ -285,6 +293,10 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 self.address,
                 suffix,
             )
+        # Availability follows the connection in persistent mode; without this
+        # the entities keep showing the last state as available until the next
+        # state change, while commands already fail as unreachable.
+        self.async_update_listeners()
         self._schedule_reconnect()
 
     @callback
@@ -552,6 +564,9 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 )
             else:
                 self._reset_keepalive()
+            # The kettle's state is often unchanged across a reconnect, so no
+            # state update would follow; tell the entities the link is back.
+            self.async_update_listeners()
 
     async def async_set_power(self, on: bool) -> None:
         await self._ensure_command_connection()
