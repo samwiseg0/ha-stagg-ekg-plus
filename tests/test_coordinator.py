@@ -31,7 +31,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.stagg_ekg_plus.api import KettleState
+from custom_components.stagg_ekg_plus.api import FRAME_SEPARATOR, KettleState
 from custom_components.stagg_ekg_plus.const import (
     CONF_CONNECTION_MODE,
     CONF_POLL_INTERVAL,
@@ -190,6 +190,40 @@ def test_on_disconnect_reconnects_when_wanted(hass: HomeAssistant) -> None:
     poll.assert_not_called()
 
 
+def test_on_disconnect_persistent_marks_entities_unavailable(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    coord._connected_since = 1.0
+    coord._client = MagicMock(is_connected=False)
+    with (
+        patch.object(coord, "async_update_listeners") as update,
+        patch.object(coord, "_schedule_reconnect"),
+    ):
+        coord._on_disconnect(MagicMock())
+    update.assert_called_once()
+    assert coord.available is False
+
+
+def test_identical_frames_keep_persistent_link_alive(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    client = coord._client
+    with (
+        patch.object(
+            type(client), "is_connected", new_callable=lambda: property(lambda _: True)
+        ),
+        patch(f"{_CO}.async_call_later") as call_later,
+        patch.object(coord, "async_set_updated_data") as updated,
+    ):
+        # An idle kettle repeats the same state frame about once a second; each
+        # one must rearm the watchdog even though the state never changes.
+        for _ in range(3):
+            client._handle_notify(None, bytearray.fromhex("efdd00000000"))
+            client._handle_notify(None, bytearray(FRAME_SEPARATOR))
+    assert call_later.call_count == 3
+    assert updated.call_count <= 1
+
+
 def test_on_disconnect_ignored_before_session(hass: HomeAssistant) -> None:
     coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
     coord._connected_since = None
@@ -263,10 +297,12 @@ async def test_ensure_connected_success(hass: HomeAssistant) -> None:
         patch(f"{_CO}.establish_connection", AsyncMock(return_value=fake_client)),
         patch.object(coord._client, "start", AsyncMock()) as start,
         patch.object(coord, "_reset_keepalive") as reset,
+        patch.object(coord, "async_update_listeners") as update,
     ):
         await coord._ensure_connected()
     start.assert_awaited_once_with(fake_client)
     reset.assert_called_once()
+    update.assert_called_once()
     assert coord._connected_since is not None
 
 
