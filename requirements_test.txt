@@ -15,7 +15,7 @@
 pytest-homeassistant-custom-component==0.13.373
 pytest-cov
 mypy==2.4.0
-ruff==0.17.1
+ruff==0.17.2
 bleak
 bleak-retry-connector
 habluetooth
