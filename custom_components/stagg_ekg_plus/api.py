@@ -102,6 +102,50 @@ STATE_HOLD_MODE = 0x06
 STATE_RESERVED_07 = 0x07
 STATE_LIFTED = 0x08
 
+# The kettle streams its whole state about once a second as this fixed cycle of
+# frames (verified live: idle, heating and holding), each frame sent as two
+# notifications, the header (ef dd <type>) and then its payload. Notifications
+# are unacknowledged, so one can be lost (seen through ESPHome Bluetooth
+# proxies several times an hour); the payload that follows is then decoded
+# under the wrong header, e.g. the target temperature as the current
+# temperature, or the hold button's 01 01 00 as a target of 1 in Fahrenheit.
+# A frame is only applied when its payload has the expected length and the
+# next frame is the one that follows it in the cycle; a lost notification
+# always breaks one of the two. Rejected frames are simply skipped, as the
+# kettle repeats them a second later.
+STATE_CYCLE = (
+    STATE_AUTO_OFF_COUNTDOWN,
+    STATE_CYCLE_MARKER,
+    STATE_CURRENT_TEMP,
+    STATE_TARGET_TEMP,
+    STATE_POWER,
+    STATE_HOLD_BUTTON,
+    STATE_HOLD_MODE,
+    STATE_RESERVED_07,
+    STATE_LIFTED,
+)
+_NEXT_IN_CYCLE = {
+    frame_type: STATE_CYCLE[(i + 1) % len(STATE_CYCLE)]
+    for i, frame_type in enumerate(STATE_CYCLE)
+}
+STATE_PAYLOAD_LENGTH = {
+    STATE_POWER: 3,
+    STATE_HOLD_BUTTON: 3,
+    STATE_TARGET_TEMP: 4,
+    STATE_CURRENT_TEMP: 4,
+    STATE_AUTO_OFF_COUNTDOWN: 4,
+    STATE_CYCLE_MARKER: 4,
+    STATE_HOLD_MODE: 3,
+    STATE_RESERVED_07: 3,
+    STATE_LIFTED: 3,
+}
+# Frames whose two-byte value is sent twice (value, value).
+_REPEATED_VALUE_FRAMES = (
+    STATE_TARGET_TEMP,
+    STATE_CURRENT_TEMP,
+    STATE_AUTO_OFF_COUNTDOWN,
+)
+
 # Temperature limits. The EKG+ accepts 40-100 C / 104-212 F; values below the
 # minimum are clamped up by the kettle (verified live: 95->104, 100->104 F).
 TEMP_MIN_C = 40
@@ -183,6 +227,25 @@ def parse_frames(buffer: bytearray) -> list[tuple[int, bytes]]:
     # Keep the trailing (possibly incomplete) frame in the buffer.
     del buffer[:last_complete]
     return frames
+
+
+def frame_is_intact(frame_type: int, payload: bytes, next_type: int | None) -> bool:
+    """Whether a state frame arrived whole, rather than spliced by a lost notification.
+
+    `next_type` is the type of the frame received right after it. See
+    STATE_CYCLE for why this catches lost notifications.
+    """
+    if len(payload) != STATE_PAYLOAD_LENGTH.get(frame_type):
+        return False
+    if next_type != _NEXT_IN_CYCLE[frame_type]:
+        return False
+    if frame_type in _REPEATED_VALUE_FRAMES and payload[:2] != payload[2:]:
+        return False
+    # The second temperature byte is the unit: 0x00 Celsius, 0x01 Fahrenheit.
+    return frame_type not in (STATE_TARGET_TEMP, STATE_CURRENT_TEMP) or payload[1] in (
+        0x00,
+        0x01,
+    )
 
 
 def apply_frame(state: KettleState, frame_type: int, payload: bytes) -> KettleState:
@@ -334,8 +397,27 @@ class StaggClient:
         _LOGGER.debug("rx %s", data.hex())
         self._buffer.extend(data)
         changed = False
-        for frame_type, payload in parse_frames(self._buffer):
+        frames = parse_frames(self._buffer)
+        # A frame is checked against the one after it, so the last one waits
+        # until the type of the next frame has arrived.
+        if frames and len(self._buffer) < len(FRAME_SEPARATOR) + 1:
+            frame_type, payload = frames.pop()
+            self._buffer[:0] = FRAME_SEPARATOR + bytes([frame_type]) + payload
+        for i, (frame_type, payload) in enumerate(frames):
             _LOGGER.debug("frame 0x%02x %s", frame_type, payload.hex())
+            next_type = (
+                frames[i + 1][0]
+                if i + 1 < len(frames)
+                else self._buffer[len(FRAME_SEPARATOR)]
+            )
+            if not frame_is_intact(frame_type, payload, next_type):
+                _LOGGER.debug(
+                    "Ignoring frame 0x%02x %s followed by 0x%02x (incomplete)",
+                    frame_type,
+                    payload.hex(),
+                    next_type,
+                )
+                continue
             new_state = apply_frame(self.state, frame_type, payload)
             if new_state != self.state:
                 self.state = new_state
