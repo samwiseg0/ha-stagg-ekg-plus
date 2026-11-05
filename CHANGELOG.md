@@ -6,6 +6,17 @@ Before tagging a release, add a `## <version>` section (matching the version in
 GitHub release notes. Older releases predate this file - see the
 [releases page](https://github.com/samwiseg0/ha-stagg-ekg-plus/releases).
 
+## 0.7.9
+
+Fix for the current temperature on a kettle set to Celsius.
+
+### Fixed
+- In Celsius, the **Current temperature** sensor is unavailable while the kettle is off or lifted, instead of showing 0 °C. (#50)
+- In Celsius, a real reading of 32 °C now shows as 32 °C. Before, the sensor went unavailable at that value. (#50)
+
+### Notes
+- Fahrenheit kettles are unaffected. No changes to options or entities.
+
 ## 0.7.8
 
 Fixes for persistent mode and for bogus temperature readings.
