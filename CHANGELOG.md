@@ -6,6 +6,18 @@ Before tagging a release, add a `## <version>` section (matching the version in
 GitHub release notes. Older releases predate this file - see the
 [releases page](https://github.com/samwiseg0/ha-stagg-ekg-plus/releases).
 
+## 0.7.8
+
+Fixes for persistent mode and for bogus temperature readings.
+
+### Fixed
+- In persistent mode, an idle kettle no longer reconnects every 22 seconds. The kettle repeats an unchanged state about once a second, and the keep-alive now counts those frames. (#42)
+- In persistent mode, entities go unavailable as soon as the connection drops and come back when it reconnects. Before, they kept showing the last state until something changed. (#42)
+- A lost Bluetooth notification no longer produces bogus values. These included a current temperature equal to the target while off, negative temperatures, and brief power flips. The decoder now skips a frame that arrived out of order, and the kettle repeats it a second later. (#46)
+
+### Notes
+- No changes to options or entities.
+
 ## 0.7.7
 
 Now available directly in HACS.
