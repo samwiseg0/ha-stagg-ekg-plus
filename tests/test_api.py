@@ -167,14 +167,20 @@ def test_apply_frame_current_temp_celsius():
     assert s.fahrenheit is False
 
 
-def test_apply_frame_current_temp_off_sentinel():
+@pytest.mark.parametrize(
+    ("payload", "current"),
+    [
+        ("2001", None),  # off in Fahrenheit: 32 F
+        ("0000", None),  # off in Celsius: 0 C (issue #46 capture)
+        ("2000", 32),  # a real 32 C while heating
+        ("0001", 0),
+    ],
+)
+def test_apply_frame_current_temp_off_reading(payload, current):
     s = api.apply_frame(
-        api.KettleState(),
-        api.STATE_CURRENT_TEMP,
-        bytes([api.CURRENT_TEMP_OFF_SENTINEL, 0x01]),
+        api.KettleState(), api.STATE_CURRENT_TEMP, bytes.fromhex(payload)
     )
-    assert s.current_temp is None
-    assert s.fahrenheit is True
+    assert s.current_temp == current
 
 
 def test_apply_frame_hold_mode():
@@ -277,7 +283,7 @@ _IDLE_STATE = api.KettleState(
     hold_button=True,
     lifted=False,
     target_temp=93,
-    current_temp=0,
+    current_temp=None,
     fahrenheit=False,
     auto_off_remaining=0,
 )
