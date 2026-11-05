@@ -124,11 +124,10 @@ TEMP_MAX_C = 100
 TEMP_MIN_F = 104
 TEMP_MAX_F = 212
 
-# The current-temperature byte reads 0x20 (32) whenever the kettle is not
-# actively measuring: powered off, or powered on but lifted off its base. It is
-# not a real reading (32 is also out of the operational range), so it is decoded
-# as "no reading" (None).
-CURRENT_TEMP_OFF_SENTINEL = 0x20
+# The current temperature reads 0 C (0 in Celsius, 32 in Fahrenheit) whenever
+# the kettle is not measuring: powered off, or on but lifted off its base.
+CURRENT_TEMP_OFF_C = 0x00
+CURRENT_TEMP_OFF_F = 0x20
 
 
 @dataclass(frozen=True)
@@ -211,9 +210,10 @@ def apply_frame(state: KettleState, frame_type: int, payload: bytes) -> KettleSt
     if frame_type == STATE_TARGET_TEMP and len(payload) >= 2:
         return replace(state, target_temp=payload[0], fahrenheit=bool(payload[1]))
     if frame_type == STATE_CURRENT_TEMP and len(payload) >= 2:
-        raw = payload[0]
-        temp = None if raw == CURRENT_TEMP_OFF_SENTINEL else raw
-        return replace(state, current_temp=temp, fahrenheit=bool(payload[1]))
+        fahrenheit = bool(payload[1])
+        off = CURRENT_TEMP_OFF_F if fahrenheit else CURRENT_TEMP_OFF_C
+        temp = None if payload[0] == off else payload[0]
+        return replace(state, current_temp=temp, fahrenheit=fahrenheit)
     if frame_type == STATE_HOLD_MODE:
         return replace(state, hold=bool(payload[0]))
     if frame_type == STATE_LIFTED:

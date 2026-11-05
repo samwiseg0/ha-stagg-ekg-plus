@@ -65,7 +65,7 @@ def _temp_unit(state: KettleState) -> str:
 
 def _current_temp(state: KettleState) -> int | None:
     # current_temp is already None unless the kettle is actively measuring
-    # (the decoder maps the 0x20 off/off-base sentinel to None).
+    # (the decoder maps the 0 C off reading to None).
     return state.current_temp
 
 
