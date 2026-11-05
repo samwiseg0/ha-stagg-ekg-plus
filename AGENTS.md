@@ -62,8 +62,11 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   connection-holding behavior (advertisement auto-connect, backoff reconnect,
   keep-alive). Persistent: always True. On-demand: True only while
   `self.data.power` (kettle on).
-- **Keep-alive watchdog** (`KEEP_ALIVE_TIMEOUT`, 20s): every notification rearms
-  it via `_reset_keepalive`; if it fires the link is treated as stale
+- **Keep-alive watchdog** (`KEEP_ALIVE_TIMEOUT`, 20s): every state change rearms
+  it via `_reset_keepalive`. When it fires it rearms again if
+  `StaggClient.last_rx` (the last notification) is under 20s old, because an
+  idle kettle repeats an unchanged state that never reaches `_handle_state`.
+  Otherwise the link is treated as stale
   (`_stale_disconnect = True`) and dropped (`_client.disconnect()`), which routes
   through `_on_disconnect` -> `_schedule_reconnect`. Runs whenever
   `_wants_connection()` and connected.
@@ -94,7 +97,9 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
 - Entity availability: `coordinator.available` = `is_connected` in persistent
   mode, but `data is not None` in on-demand (entities keep showing last-known
   state while the link is intentionally dropped). `entity.py` uses
-  `super().available and self.coordinator.available`.
+  `super().available and self.coordinator.available`. `_on_disconnect` and a
+  successful connect call `async_update_listeners()`, so a persistent-mode
+  drop or reconnect shows up without waiting for a state change.
 
 ## Bluetooth / kettle protocol facts (verified against real hardware)
 
@@ -115,6 +120,10 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   separator-split `parse_frames` is correct; do NOT add length-aware parsing
   (it would read a data byte as a length). False-separator risk ~0: every value
   is range-bounded below 0xef (temps cap 0xd4, auto-off max 0x0e10).
+- The kettle streams the frames in a fixed cycle: 04 05 03 02 00 01 06 07 08.
+  A lost notification puts a header on the next frame's payload (e.g. the
+  target read as the current temperature). `_handle_notify` applies a frame
+  only when the frame after it is its successor in `_CYCLE`.
 - Advertised name: `FELLOW` + last 2 MAC bytes (e.g. `FELLOW46B9`).
 - On connect, send the fixed auth frame `INIT_SEQUENCE` before commands work.
 - All frames (rx and tx) start with separator `0xefdd`. Notifications arrive

@@ -41,6 +41,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
@@ -102,18 +103,8 @@ STATE_HOLD_MODE = 0x06
 STATE_RESERVED_07 = 0x07
 STATE_LIFTED = 0x08
 
-# The kettle streams its whole state about once a second as this fixed cycle of
-# frames (verified live: idle, heating and holding), each frame sent as two
-# notifications, the header (ef dd <type>) and then its payload. Notifications
-# are unacknowledged, so one can be lost (seen through ESPHome Bluetooth
-# proxies several times an hour); the payload that follows is then decoded
-# under the wrong header, e.g. the target temperature as the current
-# temperature, or the hold button's 01 01 00 as a target of 1 in Fahrenheit.
-# A frame is only applied when its payload has the expected length and the
-# next frame is the one that follows it in the cycle; a lost notification
-# always breaks one of the two. Rejected frames are simply skipped, as the
-# kettle repeats them a second later.
-STATE_CYCLE = (
+# The order in which the kettle streams its state frames, about once a second.
+_CYCLE = (
     STATE_AUTO_OFF_COUNTDOWN,
     STATE_CYCLE_MARKER,
     STATE_CURRENT_TEMP,
@@ -124,27 +115,7 @@ STATE_CYCLE = (
     STATE_RESERVED_07,
     STATE_LIFTED,
 )
-_NEXT_IN_CYCLE = {
-    frame_type: STATE_CYCLE[(i + 1) % len(STATE_CYCLE)]
-    for i, frame_type in enumerate(STATE_CYCLE)
-}
-STATE_PAYLOAD_LENGTH = {
-    STATE_POWER: 3,
-    STATE_HOLD_BUTTON: 3,
-    STATE_TARGET_TEMP: 4,
-    STATE_CURRENT_TEMP: 4,
-    STATE_AUTO_OFF_COUNTDOWN: 4,
-    STATE_CYCLE_MARKER: 4,
-    STATE_HOLD_MODE: 3,
-    STATE_RESERVED_07: 3,
-    STATE_LIFTED: 3,
-}
-# Frames whose two-byte value is sent twice (value, value).
-_REPEATED_VALUE_FRAMES = (
-    STATE_TARGET_TEMP,
-    STATE_CURRENT_TEMP,
-    STATE_AUTO_OFF_COUNTDOWN,
-)
+_NEXT_IN_CYCLE = dict(zip(_CYCLE, _CYCLE[1:] + _CYCLE[:1], strict=True))
 
 # Temperature limits. The EKG+ accepts 40-100 C / 104-212 F; values below the
 # minimum are clamped up by the kettle (verified live: 95->104, 100->104 F).
@@ -229,25 +200,6 @@ def parse_frames(buffer: bytearray) -> list[tuple[int, bytes]]:
     return frames
 
 
-def frame_is_intact(frame_type: int, payload: bytes, next_type: int | None) -> bool:
-    """Whether a state frame arrived whole, rather than spliced by a lost notification.
-
-    `next_type` is the type of the frame received right after it. See
-    STATE_CYCLE for why this catches lost notifications.
-    """
-    if len(payload) != STATE_PAYLOAD_LENGTH.get(frame_type):
-        return False
-    if next_type != _NEXT_IN_CYCLE[frame_type]:
-        return False
-    if frame_type in _REPEATED_VALUE_FRAMES and payload[:2] != payload[2:]:
-        return False
-    # The second temperature byte is the unit: 0x00 Celsius, 0x01 Fahrenheit.
-    return frame_type not in (STATE_TARGET_TEMP, STATE_CURRENT_TEMP) or payload[1] in (
-        0x00,
-        0x01,
-    )
-
-
 def apply_frame(state: KettleState, frame_type: int, payload: bytes) -> KettleState:
     """Return a new KettleState with the given frame applied."""
     if not payload:
@@ -299,7 +251,10 @@ class StaggClient:
         self._on_state = on_state
         self._client: BleakClient | None = None
         self._buffer = bytearray()
+        self._prev_frame: tuple[int, bytes] | None = None
         self._seq = 0
+        # time.monotonic() of the last notification, for the keep-alive watchdog.
+        self.last_rx = 0.0
         self._write_lock = asyncio.Lock()
         self.state = KettleState()
 
@@ -329,6 +284,7 @@ class StaggClient:
         """
         self._client = client
         self._buffer.clear()
+        self._prev_frame = None
         self._seq = 0
         try:
             async with asyncio.timeout(_START_TIMEOUT):
@@ -395,30 +351,17 @@ class StaggClient:
         # live from within Home Assistant (enable debug logging on the
         # integration). Useful for decoding still-unknown bytes.
         _LOGGER.debug("rx %s", data.hex())
+        self.last_rx = time.monotonic()
         self._buffer.extend(data)
         changed = False
-        frames = parse_frames(self._buffer)
-        # A frame is checked against the one after it, so the last one waits
-        # until the type of the next frame has arrived.
-        if frames and len(self._buffer) < len(FRAME_SEPARATOR) + 1:
-            frame_type, payload = frames.pop()
-            self._buffer[:0] = FRAME_SEPARATOR + bytes([frame_type]) + payload
-        for i, (frame_type, payload) in enumerate(frames):
-            _LOGGER.debug("frame 0x%02x %s", frame_type, payload.hex())
-            next_type = (
-                frames[i + 1][0]
-                if i + 1 < len(frames)
-                else self._buffer[len(FRAME_SEPARATOR)]
-            )
-            if not frame_is_intact(frame_type, payload, next_type):
-                _LOGGER.debug(
-                    "Ignoring frame 0x%02x %s followed by 0x%02x (incomplete)",
-                    frame_type,
-                    payload.hex(),
-                    next_type,
-                )
+        for frame in parse_frames(self._buffer):
+            _LOGGER.debug("frame 0x%02x %s", frame[0], frame[1].hex())
+            prev, self._prev_frame = self._prev_frame, frame
+            # A lost notification puts a header on the wrong payload. Apply a
+            # frame only when the frame after it is the next one in the cycle.
+            if prev is None or _NEXT_IN_CYCLE.get(prev[0]) != frame[0]:
                 continue
-            new_state = apply_frame(self.state, frame_type, payload)
+            new_state = apply_frame(self.state, *prev)
             if new_state != self.state:
                 self.state = new_state
                 changed = True

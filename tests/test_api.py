@@ -26,6 +26,7 @@ import asyncio
 import dataclasses
 import importlib.util
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -254,144 +255,6 @@ def test_decode_real_capture_cycle():
     assert state.auto_off_remaining == 0
 
 
-# --- lost notifications ------------------------------------------------------
-
-# One idle cycle from a 2026-11-02 capture (kettle off, target 93 C), in the
-# order the kettle streams it.
-IDLE_CYCLE_93C = [
-    (0x04, "00000000"),
-    (0x05, "ffffffff"),
-    (0x03, "00000000"),
-    (0x02, "5d005d00"),
-    (0x00, "000000"),
-    (0x01, "010100"),
-    (0x06, "000000"),
-    (0x07, "000000"),
-    (0x08, "010100"),
-]
-
-
-def _notifications(cycle, cycles=1):
-    """The notifications the kettle sends: each frame's header, then its payload."""
-    out = []
-    for _ in range(cycles):
-        for frame_type, payload_hex in cycle:
-            out.append(api.FRAME_SEPARATOR + bytes([frame_type]))
-            out.append(bytes.fromhex(payload_hex))
-    return out
-
-
-def _notify(client, cycle, cycles=1, drop=()):
-    """Feed cycles to the client, dropping the notifications at the given indexes."""
-    for i, data in enumerate(_notifications(cycle, cycles)):
-        if i not in drop:
-            client._handle_notify(None, bytearray(data))
-
-
-def _index(cycle, frame_type, payload=False, cycle_no=1):
-    """Notification index of a frame's header (or payload) in the given cycle."""
-    pos = [t for t, _ in cycle].index(frame_type)
-    return (cycle_no * len(cycle) + pos) * 2 + int(payload)
-
-
-def _decoded(drop):
-    """States decoded after a first, intact cycle, with the given notifications lost.
-
-    Indexes in `drop` count from the start of the first cycle; the first cycle
-    only fills in the state, so aim them at the second (see _index).
-    """
-    seen: list = []
-    client = api.StaggClient(on_state=seen.append)
-    first = len(IDLE_CYCLE_93C) * 2
-    for i, data in enumerate(_notifications(IDLE_CYCLE_93C, cycles=3)):
-        if i == first:
-            # The first cycle's last frame is applied by the next header.
-            client._handle_notify(None, bytearray(data))
-            warm = len(seen)
-            continue
-        if i not in drop:
-            client._handle_notify(None, bytearray(data))
-    return seen[warm:], client.state
-
-
-def test_intact_stream_decodes():
-    seen, state = _decoded(drop=())
-    assert seen == []
-    assert state.target_temp == 93
-    assert state.current_temp == 0
-    assert state.fahrenheit is False
-    assert state.power is False
-    assert state.lifted is False
-
-
-def test_lost_notifications_never_change_state():
-    """Every run of one to four lost notifications leaves the decoded state alone.
-
-    Those are what produced bogus readings live: the target's 5d005d00 under
-    the current temperature header (93), the hold button's 010100 under the
-    target header (1 F, which also flipped both readings to Fahrenheit), the
-    marker's ffffffff as a 255 F target, and a power-off during a boil.
-    """
-    _, intact = _decoded(drop=())
-    total = len(IDLE_CYCLE_93C) * 2
-    for length in range(1, 5):
-        for start in range(total + 1, 2 * total):
-            seen, state = _decoded(drop=range(start, start + length))
-            assert seen == [] and state == intact, (start, length, seen)
-
-
-def test_current_temp_not_taken_from_target_payload():
-    # Lose the current temperature's payload and the target's header: the
-    # target payload then follows the current temperature header.
-    drop = (
-        _index(IDLE_CYCLE_93C, 0x03, payload=True),
-        _index(IDLE_CYCLE_93C, 0x02),
-    )
-    seen, state = _decoded(drop)
-    assert seen == [] and state.current_temp == 0
-
-
-def test_target_not_taken_from_hold_button_payload():
-    drop = range(
-        _index(IDLE_CYCLE_93C, 0x02, payload=True),
-        _index(IDLE_CYCLE_93C, 0x01, payload=True),
-    )
-    seen, state = _decoded(drop)
-    assert seen == [] and state.fahrenheit is False and state.target_temp == 93
-
-
-def test_frame_waits_for_next_header():
-    seen: list = []
-    client = api.StaggClient(on_state=seen.append)
-    client._handle_notify(None, bytearray.fromhex("efdd00"))
-    client._handle_notify(None, bytearray.fromhex("010100"))
-    # A separator without the next frame's type yet: the frame is held back.
-    client._handle_notify(None, bytearray(api.FRAME_SEPARATOR))
-    assert seen == []
-    client._handle_notify(None, bytearray(b"\x01"))
-    assert seen[-1].power is True
-
-
-@pytest.mark.parametrize(
-    ("frame_type", "payload", "next_type", "intact"),
-    [
-        (0x02, "5d005d00", 0x00, True),
-        (0x03, "53015301", 0x02, True),
-        (0x02, "5d005d00", 0x01, False),  # next frame missing
-        (0x03, "5d005d00", 0x00, False),  # target payload under current header
-        (0x02, "010100", 0x00, False),  # wrong length
-        (0x02, "5d005e00", 0x00, False),  # value not repeated
-        (0x02, "ffffffff", 0x00, False),  # not a unit
-        (0x04, "100e100e", 0x05, True),
-        (0x08, "010100", 0x04, True),
-        (0x08, "09640202000f0100000c75", 0x04, False),  # auth echo
-        (0x0B, "00", 0x04, False),  # unknown frame type
-    ],
-)
-def test_frame_is_intact(frame_type, payload, next_type, intact):
-    assert api.frame_is_intact(frame_type, bytes.fromhex(payload), next_type) is intact
-
-
 # --- StaggClient internals (no BLE connection) ------------------------------
 
 
@@ -401,15 +264,80 @@ def test_next_seq_wraps():
     assert client._next_seq() == 0x00
 
 
+# An idle cycle as the kettle streams it (off, Celsius, target 93), one
+# notification per entry. From the capture in issue #46.
+_IDLE_CYCLE = (
+    *("efdd04", "00000000", "efdd05", "ffffffff", "efdd03", "00000000"),
+    *("efdd02", "5d005d00", "efdd00", "000000", "efdd01", "010100"),
+    *("efdd06", "000000", "efdd07", "000000", "efdd08", "010100"),
+)
+_IDLE_STATE = api.KettleState(
+    power=False,
+    hold=False,
+    hold_button=True,
+    lifted=False,
+    target_temp=93,
+    current_temp=0,
+    fahrenheit=False,
+    auto_off_remaining=0,
+)
+
+
+def _feed(client: api.StaggClient, notifications) -> None:
+    for hex_data in notifications:
+        client._handle_notify(None, bytearray.fromhex(hex_data))
+
+
 def test_handle_notify_decodes_fragmented_frames():
     seen: list = []
     client = api.StaggClient(on_state=seen.append)
-    # Frame split across two notifications: header then payload (as the kettle
-    # actually sends it), closed by the next frame's header.
-    client._handle_notify(None, bytearray.fromhex("efdd00"))
-    client._handle_notify(None, bytearray.fromhex("010100"))
-    client._handle_notify(None, bytearray.fromhex("efdd01"))
-    assert seen and seen[-1].power is True
+    _feed(client, _IDLE_CYCLE * 2)
+    assert seen[-1] == client.state == _IDLE_STATE
+
+
+def test_handle_notify_decodes_frames_in_one_notification():
+    client = api.StaggClient()
+    _feed(client, ["".join(_IDLE_CYCLE * 2)])
+    assert client.state == _IDLE_STATE
+
+
+@pytest.mark.parametrize(
+    "lost",
+    [
+        (5, 6),  # current payload + target header: current reads 93
+        (7, 8),  # target payload + power header: target reads 0
+        (7, 8, 9, 10),  # target reads 1 in Fahrenheit
+        (1, 2, 3, 4, 5, 6),  # auto-off reads the target payload: 93 s
+        (9, 10),  # power reads the hold button: kettle reads on
+    ],
+)
+def test_handle_notify_skips_frames_spliced_by_lost_notifications(lost):
+    seen: list = []
+    client = api.StaggClient(on_state=seen.append)
+    _feed(client, _IDLE_CYCLE * 2)
+    seen.clear()
+    _feed(client, [n for i, n in enumerate(_IDLE_CYCLE) if i not in lost])
+    _feed(client, _IDLE_CYCLE)
+    assert seen == []
+    assert client.state == _IDLE_STATE
+
+
+async def test_client_start_forgets_the_previous_session_frame():
+    from unittest.mock import AsyncMock
+
+    client = api.StaggClient()
+    _feed(client, ["efdd03", "5d005d00", "efdd02"])
+    await client.start(AsyncMock())
+    # The new session starts with the frame that followed 0x03 in the old one.
+    _feed(client, ["efdd02", "5d005d00", "efdd00"])
+    assert client.state.current_temp is None
+
+
+def test_handle_notify_records_last_rx():
+    client = api.StaggClient()
+    before = time.monotonic()
+    client._handle_notify(None, bytearray.fromhex("efdd04"))
+    assert before <= client.last_rx <= time.monotonic()
 
 
 def test_handle_notify_buffer_is_bounded_on_garbage():
@@ -468,8 +396,10 @@ async def test_client_start_subscribes_and_authenticates():
     fake = AsyncMock()
     fake.is_connected = True
     await client.start(fake)
-    fake.start_notify.assert_awaited_once()
-    fake.write_gatt_char.assert_awaited()  # the auth/init write
+    fake.start_notify.assert_awaited_once_with(api.CHAR_UUID, client._handle_notify)
+    fake.write_gatt_char.assert_awaited_once_with(
+        api.CHAR_UUID, api.INIT_SEQUENCE, response=False
+    )
     assert client.is_connected
 
 
