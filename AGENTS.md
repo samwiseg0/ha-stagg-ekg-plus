@@ -120,6 +120,10 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   separator-split `parse_frames` is correct; do NOT add length-aware parsing
   (it would read a data byte as a length). False-separator risk ~0: every value
   is range-bounded below 0xef (temps cap 0xd4, auto-off max 0x0e10).
+- The kettle streams the frames in a fixed cycle: 04 05 03 02 00 01 06 07 08.
+  A lost notification puts a header on the next frame's payload (e.g. the
+  target read as the current temperature). `_handle_notify` applies a frame
+  only when the frame after it is its successor in `_CYCLE`.
 - Advertised name: `FELLOW` + last 2 MAC bytes (e.g. `FELLOW46B9`).
 - On connect, send the fixed auth frame `INIT_SEQUENCE` before commands work.
 - All frames (rx and tx) start with separator `0xefdd`. Notifications arrive

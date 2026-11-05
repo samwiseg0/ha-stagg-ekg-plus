@@ -264,15 +264,73 @@ def test_next_seq_wraps():
     assert client._next_seq() == 0x00
 
 
+# An idle cycle as the kettle streams it (off, Celsius, target 93), one
+# notification per entry. From the capture in issue #46.
+_IDLE_CYCLE = (
+    *("efdd04", "00000000", "efdd05", "ffffffff", "efdd03", "00000000"),
+    *("efdd02", "5d005d00", "efdd00", "000000", "efdd01", "010100"),
+    *("efdd06", "000000", "efdd07", "000000", "efdd08", "010100"),
+)
+_IDLE_STATE = api.KettleState(
+    power=False,
+    hold=False,
+    hold_button=True,
+    lifted=False,
+    target_temp=93,
+    current_temp=0,
+    fahrenheit=False,
+    auto_off_remaining=0,
+)
+
+
+def _feed(client: api.StaggClient, notifications) -> None:
+    for hex_data in notifications:
+        client._handle_notify(None, bytearray.fromhex(hex_data))
+
+
 def test_handle_notify_decodes_fragmented_frames():
     seen: list = []
     client = api.StaggClient(on_state=seen.append)
-    # Frame split across two notifications: header then payload (as the kettle
-    # actually sends it), followed by a separator that closes the frame.
-    client._handle_notify(None, bytearray.fromhex("efdd00"))
-    client._handle_notify(None, bytearray.fromhex("010100"))
-    client._handle_notify(None, bytearray(api.FRAME_SEPARATOR))
-    assert seen and seen[-1].power is True
+    _feed(client, _IDLE_CYCLE * 2)
+    assert seen[-1] == client.state == _IDLE_STATE
+
+
+def test_handle_notify_decodes_frames_in_one_notification():
+    client = api.StaggClient()
+    _feed(client, ["".join(_IDLE_CYCLE * 2)])
+    assert client.state == _IDLE_STATE
+
+
+@pytest.mark.parametrize(
+    "lost",
+    [
+        (5, 6),  # current payload + target header: current reads 93
+        (7, 8),  # target payload + power header: target reads 0
+        (7, 8, 9, 10),  # target reads 1 in Fahrenheit
+        (1, 2, 3, 4, 5, 6),  # auto-off reads the target payload: 93 s
+        (9, 10),  # power reads the hold button: kettle reads on
+    ],
+)
+def test_handle_notify_skips_frames_spliced_by_lost_notifications(lost):
+    seen: list = []
+    client = api.StaggClient(on_state=seen.append)
+    _feed(client, _IDLE_CYCLE * 2)
+    seen.clear()
+    _feed(client, [n for i, n in enumerate(_IDLE_CYCLE) if i not in lost])
+    _feed(client, _IDLE_CYCLE)
+    assert seen == []
+    assert client.state == _IDLE_STATE
+
+
+async def test_client_start_forgets_the_previous_session_frame():
+    from unittest.mock import AsyncMock
+
+    client = api.StaggClient()
+    _feed(client, ["efdd03", "5d005d00", "efdd02"])
+    await client.start(AsyncMock())
+    # The new session starts with the frame that followed 0x03 in the old one.
+    _feed(client, ["efdd02", "5d005d00", "efdd00"])
+    assert client.state.current_temp is None
 
 
 def test_handle_notify_records_last_rx():
@@ -338,8 +396,10 @@ async def test_client_start_subscribes_and_authenticates():
     fake = AsyncMock()
     fake.is_connected = True
     await client.start(fake)
-    fake.start_notify.assert_awaited_once()
-    fake.write_gatt_char.assert_awaited()  # the auth/init write
+    fake.start_notify.assert_awaited_once_with(api.CHAR_UUID, client._handle_notify)
+    fake.write_gatt_char.assert_awaited_once_with(
+        api.CHAR_UUID, api.INIT_SEQUENCE, response=False
+    )
     assert client.is_connected
 
 

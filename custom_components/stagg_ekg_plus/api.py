@@ -103,6 +103,20 @@ STATE_HOLD_MODE = 0x06
 STATE_RESERVED_07 = 0x07
 STATE_LIFTED = 0x08
 
+# The order in which the kettle streams its state frames, about once a second.
+_CYCLE = (
+    STATE_AUTO_OFF_COUNTDOWN,
+    STATE_CYCLE_MARKER,
+    STATE_CURRENT_TEMP,
+    STATE_TARGET_TEMP,
+    STATE_POWER,
+    STATE_HOLD_BUTTON,
+    STATE_HOLD_MODE,
+    STATE_RESERVED_07,
+    STATE_LIFTED,
+)
+_NEXT_IN_CYCLE = dict(zip(_CYCLE, _CYCLE[1:] + _CYCLE[:1], strict=True))
+
 # Temperature limits. The EKG+ accepts 40-100 C / 104-212 F; values below the
 # minimum are clamped up by the kettle (verified live: 95->104, 100->104 F).
 TEMP_MIN_C = 40
@@ -237,6 +251,7 @@ class StaggClient:
         self._on_state = on_state
         self._client: BleakClient | None = None
         self._buffer = bytearray()
+        self._prev_frame: tuple[int, bytes] | None = None
         self._seq = 0
         # time.monotonic() of the last notification, for the keep-alive watchdog.
         self.last_rx = 0.0
@@ -269,6 +284,7 @@ class StaggClient:
         """
         self._client = client
         self._buffer.clear()
+        self._prev_frame = None
         self._seq = 0
         try:
             async with asyncio.timeout(_START_TIMEOUT):
@@ -338,9 +354,14 @@ class StaggClient:
         self.last_rx = time.monotonic()
         self._buffer.extend(data)
         changed = False
-        for frame_type, payload in parse_frames(self._buffer):
-            _LOGGER.debug("frame 0x%02x %s", frame_type, payload.hex())
-            new_state = apply_frame(self.state, frame_type, payload)
+        for frame in parse_frames(self._buffer):
+            _LOGGER.debug("frame 0x%02x %s", frame[0], frame[1].hex())
+            prev, self._prev_frame = self._prev_frame, frame
+            # A lost notification puts a header on the wrong payload. Apply a
+            # frame only when the frame after it is the next one in the cycle.
+            if prev is None or _NEXT_IN_CYCLE.get(prev[0]) != frame[0]:
+                continue
+            new_state = apply_frame(self.state, *prev)
             if new_state != self.state:
                 self.state = new_state
                 changed = True
