@@ -89,9 +89,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             config_entry=entry,
         )
         self.address = address
-        self._client = StaggClient(
-            on_state=self._handle_state, on_frame=self._handle_frame
-        )
+        self._client = StaggClient(on_state=self._handle_state)
         self._connect_lock = asyncio.Lock()
         self._stopping = False
         self._reconnect_attempt = 0
@@ -143,13 +141,6 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                     else ON_DEMAND_DISCONNECT_DELAY
                 )
                 self._schedule_idle_disconnect(reset=False, delay=delay)
-
-    @callback
-    def _handle_frame(self) -> None:
-        # Every frame proves the link is alive, including the identical state
-        # the kettle repeats about once a second while idle; restart the
-        # watchdog. Resetting only on a state change would drop a healthy idle
-        # link every KEEP_ALIVE_TIMEOUT seconds.
         self._reset_keepalive()
 
     @property
@@ -293,9 +284,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 self.address,
                 suffix,
             )
-        # Availability follows the connection in persistent mode; without this
-        # the entities keep showing the last state as available until the next
-        # state change, while commands already fail as unreachable.
+        # Persistent availability follows the link. Entities only refresh on update.
         self.async_update_listeners()
         self._schedule_reconnect()
 
@@ -327,6 +316,10 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             or not self._client.is_connected
             or not self._wants_connection()
         ):
+            return
+        if time.monotonic() - self._client.last_rx < KEEP_ALIVE_TIMEOUT:
+            # An idle kettle repeats an unchanged state, so _handle_state never ran.
+            self._reset_keepalive()
             return
         _LOGGER.info(
             "No data from kettle %s in %ss; forcing a reconnect",
@@ -564,8 +557,6 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 )
             else:
                 self._reset_keepalive()
-            # The kettle's state is often unchanged across a reconnect, so no
-            # state update would follow; tell the entities the link is back.
             self.async_update_listeners()
 
     async def async_set_power(self, on: bool) -> None:

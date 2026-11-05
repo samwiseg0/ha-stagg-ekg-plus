@@ -41,6 +41,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
@@ -231,14 +232,14 @@ class StaggClient:
         self,
         device: BLEDevice | str | None = None,
         on_state: Callable[[KettleState], None] | None = None,
-        on_frame: Callable[[], None] | None = None,
     ) -> None:
         self._device = device
         self._on_state = on_state
-        self._on_frame = on_frame
         self._client: BleakClient | None = None
         self._buffer = bytearray()
         self._seq = 0
+        # time.monotonic() of the last notification, for the keep-alive watchdog.
+        self.last_rx = 0.0
         self._write_lock = asyncio.Lock()
         self.state = KettleState()
 
@@ -334,12 +335,11 @@ class StaggClient:
         # live from within Home Assistant (enable debug logging on the
         # integration). Useful for decoding still-unknown bytes.
         _LOGGER.debug("rx %s", data.hex())
+        self.last_rx = time.monotonic()
         self._buffer.extend(data)
         changed = False
-        received = False
         for frame_type, payload in parse_frames(self._buffer):
             _LOGGER.debug("frame 0x%02x %s", frame_type, payload.hex())
-            received = True
             new_state = apply_frame(self.state, frame_type, payload)
             if new_state != self.state:
                 self.state = new_state
@@ -357,8 +357,3 @@ class StaggClient:
             _LOGGER.debug("state %s", self.state)
             if self._on_state is not None:
                 self._on_state(self.state)
-        # The kettle repeats its full state about once a second even when
-        # nothing changes, so any complete frame proves the link is alive;
-        # `on_state` above only fires on a change.
-        if received and self._on_frame is not None:
-            self._on_frame()

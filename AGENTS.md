@@ -62,8 +62,11 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   connection-holding behavior (advertisement auto-connect, backoff reconnect,
   keep-alive). Persistent: always True. On-demand: True only while
   `self.data.power` (kettle on).
-- **Keep-alive watchdog** (`KEEP_ALIVE_TIMEOUT`, 20s): every notification rearms
-  it via `_reset_keepalive`; if it fires the link is treated as stale
+- **Keep-alive watchdog** (`KEEP_ALIVE_TIMEOUT`, 20s): every state change rearms
+  it via `_reset_keepalive`. When it fires it rearms again if
+  `StaggClient.last_rx` (the last notification) is under 20s old, because an
+  idle kettle repeats an unchanged state that never reaches `_handle_state`.
+  Otherwise the link is treated as stale
   (`_stale_disconnect = True`) and dropped (`_client.disconnect()`), which routes
   through `_on_disconnect` -> `_schedule_reconnect`. Runs whenever
   `_wants_connection()` and connected.
@@ -94,7 +97,9 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
 - Entity availability: `coordinator.available` = `is_connected` in persistent
   mode, but `data is not None` in on-demand (entities keep showing last-known
   state while the link is intentionally dropped). `entity.py` uses
-  `super().available and self.coordinator.available`.
+  `super().available and self.coordinator.available`. `_on_disconnect` and a
+  successful connect call `async_update_listeners()`, so a persistent-mode
+  drop or reconnect shows up without waiting for a state change.
 
 ## Bluetooth / kettle protocol facts (verified against real hardware)
 
