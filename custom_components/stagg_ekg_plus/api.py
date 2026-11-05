@@ -41,6 +41,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
@@ -237,6 +238,8 @@ class StaggClient:
         self._client: BleakClient | None = None
         self._buffer = bytearray()
         self._seq = 0
+        # time.monotonic() of the last notification, for the keep-alive watchdog.
+        self.last_rx = 0.0
         self._write_lock = asyncio.Lock()
         self.state = KettleState()
 
@@ -332,6 +335,7 @@ class StaggClient:
         # live from within Home Assistant (enable debug logging on the
         # integration). Useful for decoding still-unknown bytes.
         _LOGGER.debug("rx %s", data.hex())
+        self.last_rx = time.monotonic()
         self._buffer.extend(data)
         changed = False
         for frame_type, payload in parse_frames(self._buffer):

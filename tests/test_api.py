@@ -26,6 +26,7 @@ import asyncio
 import dataclasses
 import importlib.util
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -272,6 +273,13 @@ def test_handle_notify_decodes_fragmented_frames():
     client._handle_notify(None, bytearray.fromhex("010100"))
     client._handle_notify(None, bytearray(api.FRAME_SEPARATOR))
     assert seen and seen[-1].power is True
+
+
+def test_handle_notify_records_last_rx():
+    client = api.StaggClient()
+    before = time.monotonic()
+    client._handle_notify(None, bytearray.fromhex("efdd04"))
+    assert before <= client.last_rx <= time.monotonic()
 
 
 def test_handle_notify_buffer_is_bounded_on_garbage():

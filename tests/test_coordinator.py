@@ -22,8 +22,9 @@ methods are patched where needed so no real timers linger.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from homeassistant.const import CONF_ADDRESS
@@ -38,6 +39,7 @@ from custom_components.stagg_ekg_plus.const import (
     CONNECTION_MODE_ON_DEMAND,
     CONNECTION_MODE_PERSISTENT,
     DOMAIN,
+    KEEP_ALIVE_TIMEOUT,
 )
 from custom_components.stagg_ekg_plus.coordinator import StaggCoordinator
 
@@ -184,10 +186,12 @@ def test_on_disconnect_reconnects_when_wanted(hass: HomeAssistant) -> None:
     with (
         patch.object(coord, "_schedule_poll") as poll,
         patch.object(coord, "_schedule_reconnect") as reconnect,
+        patch.object(coord, "async_update_listeners") as update,
     ):
         coord._on_disconnect(MagicMock())
     reconnect.assert_called_once()
     poll.assert_not_called()
+    update.assert_called_once()
 
 
 def test_on_disconnect_ignored_before_session(hass: HomeAssistant) -> None:
@@ -263,10 +267,12 @@ async def test_ensure_connected_success(hass: HomeAssistant) -> None:
         patch(f"{_CO}.establish_connection", AsyncMock(return_value=fake_client)),
         patch.object(coord._client, "start", AsyncMock()) as start,
         patch.object(coord, "_reset_keepalive") as reset,
+        patch.object(coord, "async_update_listeners") as update,
     ):
         await coord._ensure_connected()
     start.assert_awaited_once_with(fake_client)
     reset.assert_called_once()
+    update.assert_called_once()
     assert coord._connected_since is not None
 
 
@@ -352,7 +358,9 @@ async def test_async_probe_reschedules_when_unreachable(hass: HomeAssistant) -> 
 
 def test_keepalive_timer_fired_drops_link(hass: HomeAssistant) -> None:
     coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
-    coord._client = MagicMock(is_connected=True)
+    coord._client = MagicMock(
+        is_connected=True, last_rx=time.monotonic() - KEEP_ALIVE_TIMEOUT - 1
+    )
     with (
         patch.object(coord, "_async_disconnect", MagicMock(return_value=None)),
         patch.object(coord.config_entry, "async_create_background_task") as task,
@@ -360,6 +368,36 @@ def test_keepalive_timer_fired_drops_link(hass: HomeAssistant) -> None:
         coord._keepalive_timer_fired(_now())
     assert coord._stale_disconnect is True
     task.assert_called_once()
+
+
+def test_keepalive_timer_fired_drops_link_that_never_sent_a_frame(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    with (
+        patch.object(
+            type(coord._client), "is_connected", PropertyMock(return_value=True)
+        ),
+        patch.object(coord, "_async_disconnect", MagicMock(return_value=None)),
+        patch.object(coord.config_entry, "async_create_background_task") as task,
+    ):
+        coord._keepalive_timer_fired(_now())
+    task.assert_called_once()
+
+
+def test_keepalive_timer_fired_keeps_link_with_recent_frames(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    coord._client = MagicMock(is_connected=True, last_rx=time.monotonic())
+    with (
+        patch.object(coord, "_reset_keepalive") as reset,
+        patch.object(coord.config_entry, "async_create_background_task") as task,
+    ):
+        coord._keepalive_timer_fired(_now())
+    reset.assert_called_once()
+    task.assert_not_called()
+    assert coord._stale_disconnect is False
 
 
 def test_idle_disconnect_fired_drops_when_off(hass: HomeAssistant) -> None:
@@ -701,7 +739,7 @@ def test_schedule_reconnect_backoff_escalates_and_caps(
 def test_keepalive_watchdog_to_reconnect_chain(hass: HomeAssistant) -> None:
     """The watchdog marks the link stale, drops it, and the drop reconnects."""
     coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
-    coord._client = MagicMock(is_connected=True)
+    coord._client = MagicMock(is_connected=True, last_rx=0.0)
     coord._connected_since = 1.0
 
     with (

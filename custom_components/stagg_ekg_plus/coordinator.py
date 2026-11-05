@@ -141,7 +141,6 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                     else ON_DEMAND_DISCONNECT_DELAY
                 )
                 self._schedule_idle_disconnect(reset=False, delay=delay)
-        # Every notification proves the link is alive; restart the watchdog.
         self._reset_keepalive()
 
     @property
@@ -285,6 +284,8 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 self.address,
                 suffix,
             )
+        # Persistent availability follows the link. Entities only refresh on update.
+        self.async_update_listeners()
         self._schedule_reconnect()
 
     @callback
@@ -315,6 +316,10 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             or not self._client.is_connected
             or not self._wants_connection()
         ):
+            return
+        if time.monotonic() - self._client.last_rx < KEEP_ALIVE_TIMEOUT:
+            # An idle kettle repeats an unchanged state, so _handle_state never ran.
+            self._reset_keepalive()
             return
         _LOGGER.info(
             "No data from kettle %s in %ss; forcing a reconnect",
@@ -552,6 +557,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
                 )
             else:
                 self._reset_keepalive()
+            self.async_update_listeners()
 
     async def async_set_power(self, on: bool) -> None:
         await self._ensure_command_connection()
