@@ -6,6 +6,22 @@ Before tagging a release, add a `## <version>` section (matching the version in
 GitHub release notes. Older releases predate this file - see the
 [releases page](https://github.com/samwiseg0/ha-stagg-ekg-plus/releases).
 
+## 0.8.0
+
+The integration now reports when the kettle is unreachable.
+
+### Added
+- A **Reachable** diagnostic binary sensor. It is on while Home Assistant is connected to the kettle or hears it advertise. It turns off after 5 minutes with neither, and the log gets one warning. It shows unknown for up to 5 minutes after a restart. Use it to get a notification when the kettle needs a power cycle.
+
+### Fixed
+- In on-demand mode, entities no longer go unavailable after a Home Assistant restart while the kettle is off. They show unknown until the kettle first reports. A tap on **Power** now connects, or shows a "not reachable" error. Before, Home Assistant rejected the tap and the integration logged nothing.
+- In on-demand mode, a failed first connect at startup no longer leaves the entry in setup retry with no entities.
+- **Enable debug logging** no longer logs every Bluetooth signal from every nearby device. It still logs the kettle frames and the connection retries.
+
+### Notes
+- Persistent mode keeps its entity availability. It also gets the **Reachable** sensor.
+- On demand, an automation that checks kettle entities for `unavailable` no longer fires when the kettle is unreachable. Trigger it on **Reachable** turning off instead.
+
 ## 0.7.9
 
 Fix for the current temperature on a kettle set to Celsius.
