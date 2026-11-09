@@ -26,7 +26,7 @@ custom_components/stagg_ekg_plus/
   climate.py         # target temp + heat/off; follows kettle F/C unit
   switch.py          # power
   sensor.py          # current temp (None when off), target temp, auto-off timer, rssi (diag, opt-in)
-  binary_sensor.py   # holding (0x06), on-base (0x08), hold-enabled (0x01, opt-in)
+  binary_sensor.py   # holding (0x06), on-base (0x08), hold-enabled (0x01, opt-in), reachable (diag)
   strings.json, translations/en.json
   brand/             # bundled icon.png + logo.png + dark_logo.png (HA 2026.3+ local brand images)
 hacs.json
@@ -95,11 +95,37 @@ tools/probe.py       # standalone connect/auth/notify decoder (calibration)
   physical power-on (advert carries no state) without persistent mode. No effect
   in persistent mode.
 - Entity availability: `coordinator.available` = `is_connected` in persistent
-  mode, but `data is not None` in on-demand (entities keep showing last-known
-  state while the link is intentionally dropped). `entity.py` uses
+  mode, and always True in on-demand. On demand, entities show the last-known
+  state, or unknown before the first frame. A command then connects or raises
+  `not_reachable`. With `data is not None` instead, HA rejected every tap after
+  a restart and never called the integration (2026-11-08 outage). `entity.py` uses
   `super().available and self.coordinator.available`. `_on_disconnect` and a
   successful connect call `async_update_listeners()`, so a persistent-mode
   drop or reconnect shows up without waiting for a state change.
+
+## Reachable sensor
+
+- `StaggCoordinator.reachable`: None after setup, True while connected or
+  recently heard, False after `REACHABLE_TIMEOUT` (300s) with neither.
+  `_set_reachable` logs one WARNING on each change to False and one INFO on
+  recovery. `StaggReachableSensor` (connectivity, diagnostic) shows it and stays
+  available in every mode.
+- `_check_reachable` runs every minute. It reads the time of the last
+  advertisement HA stored (`async_last_service_info(...).time`) and the end of
+  the last connection (`_last_seen`). HA calls the advertisement callback only
+  when the data changes, so the callback alone cannot show the kettle is alive.
+- Only advertisements stamped after `_started` count. At startup HA restores its
+  Bluetooth cache with the startup time, so a dead kettle would otherwise look
+  alive. All reachability times use `bluetooth.MONOTONIC_TIME`, HA's clock.
+- An idle kettle on the base advertised about 11 times a second, with a largest
+  gap of 8s during a poll connect (2026-11-09, local adapter). The 300s window
+  is far above that.
+- On demand, a `BleakError` or `TimeoutError` from the first connect in
+  `async_start` logs one WARNING and setup continues. HA logs a failed setup
+  only at INFO and creates no entities. Persistent mode still raises.
+- `manifest.json` `loggers` lists only `bleak_retry_connector`. With `bleak`
+  listed, Enable debug logging wrote 34,958 BlueZ RSSI lines in 5 minutes
+  (2026-11-09).
 
 ## Bluetooth / kettle protocol facts (verified against real hardware)
 

@@ -35,6 +35,7 @@ from custom_components.stagg_ekg_plus.api import KettleState
 from custom_components.stagg_ekg_plus.binary_sensor import (
     BINARY_SENSORS,
     StaggBinarySensor,
+    StaggReachableSensor,
 )
 from custom_components.stagg_ekg_plus.climate import StaggClimate
 from custom_components.stagg_ekg_plus.const import DOMAIN
@@ -316,3 +317,22 @@ def test_binary_sensor_on_base_unknown_when_lifted_none(hass: HomeAssistant) -> 
 def test_binary_sensor_no_data_returns_none(hass: HomeAssistant) -> None:
     coord = _coordinator(hass, None)
     assert StaggBinarySensor(coord, _binary_desc("hold")).is_on is None
+
+
+def test_on_demand_switch_available_without_data(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, None)
+    switch = StaggPowerSwitch(coord)
+    assert switch.available is True
+    assert switch.is_on is None
+
+
+def test_reachable_sensor_stays_available(hass: HomeAssistant) -> None:
+    coord = _coordinator(hass, None)
+    coord._on_demand = False  # persistent and disconnected
+    sensor = StaggReachableSensor(coord)
+    assert coord.available is False
+    assert sensor.available is True
+    assert sensor.unique_id == f"{ADDRESS}_reachable"
+    assert sensor.is_on is None  # unknown until the kettle is heard or connected
+    coord.reachable = True
+    assert sensor.is_on is True

@@ -20,9 +20,11 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -105,6 +107,7 @@ async def test_diagnostics(hass: HomeAssistant) -> None:
     assert diag["poll_interval"] == 0
     assert diag["state"]["target_temp"] == 200
     assert diag["state"]["power"] is False
+    assert diag["reachable"] is None
 
 
 async def test_update_listener_reloads_entry(hass: HomeAssistant) -> None:
@@ -158,3 +161,24 @@ async def test_entities_reflect_coordinator_state(hass: HomeAssistant) -> None:
         assert climate.attributes["temperature"] == 205
         assert climate.attributes["current_temperature"] == 180
         assert hass.states.get(switch_ids[0]).state == "on"
+
+
+async def test_on_demand_entities_unknown_without_state(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """After a restart with the kettle silent, entities show unknown."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    with (
+        patch.object(StaggCoordinator, "async_start", AsyncMock()),
+        patch.object(StaggCoordinator, "async_stop", AsyncMock()),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        entries = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+        enabled = [e.entity_id for e in entries if e.disabled_by is None]
+        assert len(enabled) == 8  # hold enabled and signal strength are opt-in
+        assert {hass.states.get(e).state for e in enabled} == {"unknown"}
+    assert "not a valid unit" not in caplog.text

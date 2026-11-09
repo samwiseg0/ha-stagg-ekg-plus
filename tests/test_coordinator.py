@@ -22,11 +22,13 @@ methods are patched where needed so no real timers linger.
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
+from bleak.exc import BleakError
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -40,6 +42,7 @@ from custom_components.stagg_ekg_plus.const import (
     CONNECTION_MODE_PERSISTENT,
     DOMAIN,
     KEEP_ALIVE_TIMEOUT,
+    REACHABLE_TIMEOUT,
 )
 from custom_components.stagg_ekg_plus.coordinator import StaggCoordinator
 
@@ -90,10 +93,11 @@ def test_available_persistent_tracks_connection(hass: HomeAssistant) -> None:
     assert coord.available is True
 
 
-def test_available_on_demand_tracks_data(hass: HomeAssistant) -> None:
+def test_available_on_demand_without_data(hass: HomeAssistant) -> None:
+    # A tap must reach the command path, which connects or raises not_reachable.
     coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND)
-    assert coord.available is False
-    coord.async_set_updated_data(KettleState())
+    coord._client = MagicMock(is_connected=False)
+    assert coord.data is None
     assert coord.available is True
 
 
@@ -233,6 +237,7 @@ async def test_async_start_on_demand_schedules_poll(hass: HomeAssistant) -> None
     coord._client = MagicMock(is_connected=False)
     with (
         patch(f"{_BT}.async_register_callback", return_value=MagicMock()),
+        patch(f"{_CO}.async_track_time_interval", return_value=MagicMock()),
         patch.object(coord, "_ensure_connected", AsyncMock()),
         patch.object(coord, "_schedule_poll") as poll,
     ):
@@ -272,8 +277,9 @@ async def test_ensure_connected_success(hass: HomeAssistant) -> None:
         await coord._ensure_connected()
     start.assert_awaited_once_with(fake_client)
     reset.assert_called_once()
-    update.assert_called_once()
+    update.assert_called()
     assert coord._connected_since is not None
+    assert coord.reachable is True
 
 
 async def test_ensure_connected_no_device(hass: HomeAssistant) -> None:
@@ -601,6 +607,7 @@ async def test_async_start_persistent_schedules_reconnect(
     coord._client = MagicMock(is_connected=False)
     with (
         patch(f"{_BT}.async_register_callback", return_value=MagicMock()),
+        patch(f"{_CO}.async_track_time_interval", return_value=MagicMock()),
         patch.object(coord, "_ensure_connected", AsyncMock()),
         patch.object(coord, "_schedule_reconnect") as reconnect,
     ):
@@ -756,3 +763,120 @@ def test_keepalive_watchdog_to_reconnect_chain(hass: HomeAssistant) -> None:
         coord._on_disconnect(MagicMock())
     reconnect.assert_called_once()
     assert coord._stale_disconnect is False
+
+
+async def test_async_start_on_demand_survives_connect_failure(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    # A cached but silent kettle must not fail setup, or no entities exist.
+    coord = _coordinator(hass, mode=CONNECTION_MODE_ON_DEMAND, poll="120")
+    coord._client = MagicMock(is_connected=False)
+    with (
+        patch(f"{_BT}.async_register_callback", return_value=MagicMock()),
+        patch(f"{_CO}.async_track_time_interval", return_value=MagicMock()),
+        patch.object(
+            coord, "_ensure_connected", AsyncMock(side_effect=BleakError("gone"))
+        ),
+        patch.object(coord, "_schedule_poll") as poll,
+    ):
+        await coord.async_start()
+    poll.assert_called_once()
+    assert "Could not connect to kettle" in caplog.text
+
+
+async def test_async_start_persistent_raises_connect_failure(
+    hass: HomeAssistant,
+) -> None:
+    coord = _coordinator(hass, mode=CONNECTION_MODE_PERSISTENT)
+    coord._client = MagicMock(is_connected=False)
+    with (
+        patch(f"{_BT}.async_register_callback", return_value=MagicMock()),
+        patch(f"{_CO}.async_track_time_interval", return_value=MagicMock()),
+        patch.object(coord, "_ensure_connected", AsyncMock(side_effect=TimeoutError)),
+        pytest.raises(TimeoutError),
+    ):
+        await coord.async_start()
+
+
+def test_reachable_off_after_timeout_without_evidence(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    coord = _coordinator(hass)
+    coord._client = MagicMock(is_connected=False)
+    with (
+        patch(f"{_BT}.async_last_service_info", return_value=None),
+        patch(f"{_BT}.MONOTONIC_TIME") as clock,
+    ):
+        clock.return_value = coord._started + REACHABLE_TIMEOUT - 1
+        coord._check_reachable()
+        assert coord.reachable is None
+        clock.return_value = coord._started + REACHABLE_TIMEOUT
+        coord._check_reachable()
+        coord._check_reachable()
+    assert coord.reachable is False
+    assert caplog.text.count("is unreachable") == 1
+
+
+def test_reachable_ignores_advertisement_cached_before_start(
+    hass: HomeAssistant,
+) -> None:
+    # HA replays its cached advertisement at registration, stamped before start.
+    coord = _coordinator(hass)
+    coord._client = MagicMock(is_connected=False)
+    cached = MagicMock(time=coord._started - 1)
+    with (
+        patch(f"{_BT}.async_last_service_info", return_value=cached),
+        patch(f"{_BT}.MONOTONIC_TIME") as clock,
+    ):
+        clock.return_value = coord._started + REACHABLE_TIMEOUT
+        coord._check_reachable()
+    assert coord.reachable is False
+
+
+def test_reachable_recovers_from_stored_advertisement(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    # HA skips the callback for an unchanged advertisement but stores its time.
+    caplog.set_level(logging.INFO, logger=_CO)
+    coord = _coordinator(hass)
+    coord._client = MagicMock(is_connected=False)
+    heard = MagicMock(time=coord._started + 1)
+    with (
+        patch(f"{_BT}.async_last_service_info", return_value=heard),
+        patch(f"{_BT}.MONOTONIC_TIME") as clock,
+    ):
+        clock.return_value = heard.time + 1
+        coord._check_reachable()
+        assert coord.reachable is True
+        clock.return_value = heard.time + REACHABLE_TIMEOUT
+        coord._check_reachable()
+        assert coord.reachable is False
+        heard.time = clock.return_value + 1
+        clock.return_value += 2
+        coord._check_reachable()
+    assert coord.reachable is True
+    assert caplog.text.count("is reachable again") == 1
+
+
+def test_reachable_times_out_after_disconnect(hass: HomeAssistant) -> None:
+    # A kettle that freezes after a session never advertises again.
+    coord = _coordinator(hass)
+    coord._client = MagicMock(is_connected=True)
+    coord._check_reachable()
+    assert coord.reachable is True
+    coord._client = MagicMock(is_connected=False)
+    coord._connected_since = time.monotonic()
+    with patch(f"{_BT}.MONOTONIC_TIME") as clock, patch.object(coord, "_schedule_poll"):
+        clock.return_value = coord._started + 1000
+        coord._on_disconnect(MagicMock())
+    assert coord._last_seen == coord._started + 1000
+    with (
+        patch(f"{_BT}.async_last_service_info", return_value=None),
+        patch(f"{_BT}.MONOTONIC_TIME") as clock,
+    ):
+        clock.return_value = coord._last_seen + REACHABLE_TIMEOUT - 1
+        coord._check_reachable()
+        assert coord.reachable is True
+        clock.return_value = coord._last_seen + REACHABLE_TIMEOUT
+        coord._check_reachable()
+    assert coord.reachable is False
