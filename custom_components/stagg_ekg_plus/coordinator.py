@@ -22,9 +22,10 @@ import asyncio
 import contextlib
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from bleak.backends.device import BLEDevice
+from bleak.exc import BleakError
 from bleak_retry_connector import (
     BleakClientWithServiceCache,
     establish_connection,
@@ -39,7 +40,7 @@ from homeassistant.components.bluetooth import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .api import KettleState, StaggClient
@@ -53,6 +54,7 @@ from .const import (
     KEEP_ALIVE_TIMEOUT,
     ON_DEMAND_DISCONNECT_DELAY,
     PROBE_DISCONNECT_DELAY,
+    REACHABLE_TIMEOUT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,6 +110,12 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self._stale_disconnect = False
         self._probing = False
         self._probe_started: float | None = None
+        # None until the kettle is heard or connected, or REACHABLE_TIMEOUT passes.
+        self.reachable: bool | None = None
+        # HA's clock, so these compare with its advertisement times.
+        self._started = bluetooth.MONOTONIC_TIME()
+        # When the last connection ended. HA stores the advertisement times.
+        self._last_seen: float | None = None
 
     @callback
     def _handle_state(self, state: KettleState) -> None:
@@ -172,13 +180,12 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
     def available(self) -> bool:
         """Whether entities should report as available.
 
-        In on-demand mode the link is intentionally dropped while the kettle is
-        off, so availability follows whether we have any state rather than the
-        live connection. In persistent mode availability tracks the connection.
+        Persistent mode tracks the connection. On-demand mode drops the link
+        while the kettle is off, so entities stay available. They show the last
+        known state, or unknown before the first one. A command then connects
+        or raises not_reachable.
         """
-        if self._on_demand:
-            return self.data is not None
-        return self._client.is_connected
+        return self._on_demand or self._client.is_connected
 
     async def async_start(self) -> None:
         """Register for advertisements and open the initial connection."""
@@ -194,7 +201,21 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         self.config_entry.async_on_unload(self._cancel_keepalive_timer)
         self.config_entry.async_on_unload(self._cancel_idle_disconnect_timer)
         self.config_entry.async_on_unload(self._cancel_poll_timer)
-        await self._ensure_connected()
+        self.config_entry.async_on_unload(
+            async_track_time_interval(
+                self.hass, self._check_reachable, timedelta(minutes=1)
+            )
+        )
+        try:
+            await self._ensure_connected()
+        except (BleakError, TimeoutError) as err:
+            if not self._on_demand:
+                raise
+            # HA logs a failed setup only at INFO and creates no entities. On
+            # demand, keep the entry loaded so the Reachable sensor can report.
+            _LOGGER.warning(
+                "Could not connect to kettle %s at startup: %s", self.address, err
+            )
         if not self._client.is_connected and not self._on_demand:
             # Not reachable yet; keep retrying in the background. In on-demand
             # mode we instead wait for the next command to trigger a connect.
@@ -247,6 +268,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             return
         held = _format_duration(time.monotonic() - self._connected_since)
         self._connected_since = None
+        self._last_seen = bluetooth.MONOTONIC_TIME()
         if self._stopping:
             return
         stale = self._stale_disconnect
@@ -287,6 +309,48 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
         # Persistent availability follows the link. Entities only refresh on update.
         self.async_update_listeners()
         self._schedule_reconnect()
+
+    @callback
+    def _set_reachable(self, reachable: bool) -> None:
+        """Record whether Home Assistant can reach the kettle. Log each change."""
+        if reachable == self.reachable:
+            return
+        was = self.reachable
+        self.reachable = reachable
+        if not reachable:
+            _LOGGER.warning(
+                "Kettle %s is unreachable. Home Assistant has not heard it over "
+                "Bluetooth for %s",
+                self.address,
+                _format_duration(REACHABLE_TIMEOUT),
+            )
+        elif was is False:
+            _LOGGER.info("Kettle %s is reachable again", self.address)
+        self.async_update_listeners()
+
+    @callback
+    def _check_reachable(self, _now: datetime | None = None) -> None:
+        """Mark the kettle reachable while connected or recently heard.
+
+        HA calls the advertisement callback only when the advertisement data
+        changes, so this reads the time of the last one HA stored instead.
+        """
+        if self._client.is_connected:
+            self._set_reachable(True)
+            return
+        now = bluetooth.MONOTONIC_TIME()
+        seen = self._last_seen
+        info = bluetooth.async_last_service_info(
+            self.hass, self.address, connectable=True
+        )
+        # At startup HA restores its Bluetooth cache stamped with the startup
+        # time. Only an advertisement received after setup shows the kettle is up.
+        if info is not None and info.time > self._started:
+            seen = info.time if seen is None else max(seen, info.time)
+        if seen is not None and now - seen < REACHABLE_TIMEOUT:
+            self._set_reachable(True)
+        elif now - self._started >= REACHABLE_TIMEOUT:
+            self._set_reachable(False)
 
     @callback
     def _reset_keepalive(self) -> None:
@@ -547,6 +611,7 @@ class StaggCoordinator(DataUpdateCoordinator[KettleState]):
             self._cancel_poll_timer()
             self._connected_since = time.monotonic()
             self._reconnect_attempt = 0
+            self._set_reachable(True)
             if self._on_demand:
                 self._schedule_idle_disconnect(
                     delay=(

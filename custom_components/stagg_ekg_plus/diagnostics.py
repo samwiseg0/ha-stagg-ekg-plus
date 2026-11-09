@@ -54,6 +54,7 @@ async def async_get_config_entry_diagnostics(
             ),
             "is_connected": coordinator.is_connected,
             "available": coordinator.available,
+            "reachable": coordinator.reachable,
             "state": asdict(state) if state is not None else None,
         },
         TO_REDACT,

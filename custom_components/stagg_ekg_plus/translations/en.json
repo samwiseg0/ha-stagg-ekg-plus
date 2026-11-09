@@ -91,6 +91,9 @@
       },
       "on_base": {
         "name": "On base"
+      },
+      "reachable": {
+        "name": "Reachable"
       }
     }
   }

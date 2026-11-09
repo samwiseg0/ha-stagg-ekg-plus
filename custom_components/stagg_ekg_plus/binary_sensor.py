@@ -26,6 +26,8 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
+from homeassistant.components.binary_sensor.const import BinarySensorDeviceClass
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -75,7 +77,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up the kettle binary sensors."""
     coordinator = entry.runtime_data
-    async_add_entities(StaggBinarySensor(coordinator, desc) for desc in BINARY_SENSORS)
+    entities: list[BinarySensorEntity] = [
+        StaggBinarySensor(coordinator, desc) for desc in BINARY_SENSORS
+    ]
+    entities.append(StaggReachableSensor(coordinator))
+    async_add_entities(entities)
 
 
 class StaggBinarySensor(StaggEntity, BinarySensorEntity):
@@ -95,3 +101,30 @@ class StaggBinarySensor(StaggEntity, BinarySensorEntity):
     def is_on(self) -> bool | None:
         data = self.coordinator.data
         return self.entity_description.value_fn(data) if data else None
+
+
+class StaggReachableSensor(StaggEntity, BinarySensorEntity):
+    """On while Home Assistant is connected to the kettle or hears it advertise.
+
+    Unknown after setup until the first sign of the kettle or REACHABLE_TIMEOUT.
+    It stays available in every mode, so an automation can alert when it
+    turns off.
+    """
+
+    _attr_translation_key = "reachable"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: StaggCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.address}_reachable"
+
+    @property
+    @override
+    def available(self) -> bool:
+        return True
+
+    @property
+    @override
+    def is_on(self) -> bool | None:
+        return self.coordinator.reachable
